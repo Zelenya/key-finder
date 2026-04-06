@@ -1,0 +1,5 @@
+shortcut,description
+cmd+shift+d,split pane down
+cmd+d,split pane right
+cmd+w,close surface
+cmd+shift+w,close surface
