@@ -50,6 +50,7 @@ impl SqliteNotificationSnapshotRepository {
                         }
                     }
                     Ok(ShortcutMessage {
+                        app_id,
                         app: app_name,
                         match_names,
                         shortcut: render_canonical_shortcut(&shortcut_norm),

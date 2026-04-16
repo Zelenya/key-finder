@@ -66,7 +66,12 @@ fn open_settings_dialog(
             return Ok(SettingsDialogResult::Canceled);
         }
         if response == objc2_app_kit::NSModalResponseStop {
-            if let Err(error) = save_settings(&ui, repo, worker_tx) {
+            let edited = AppSettings {
+                notify_interval: read_optional_text_field(&ui.notify_interval_field),
+                terminal_notifier_path: read_optional_text_field(&ui.terminal_notifier_field),
+            };
+
+            if let Err(error) = save_settings(repo, worker_tx, edited) {
                 show_settings_error(&app, "Save failed", &error.to_string())?;
                 continue;
             }
@@ -81,16 +86,12 @@ fn open_settings_dialog(
 }
 
 fn save_settings(
-    ui: &SettingsWindowUi,
     repo: &SqliteSettingsRepository,
     worker_tx: &mpsc::Sender<WorkerCommand>,
+    new_settings: AppSettings,
 ) -> Result<(), AppError> {
-    let edited = AppSettings {
-        notify_interval: read_optional_text_field(&ui.notify_interval_field),
-        terminal_notifier_path: read_optional_text_field(&ui.terminal_notifier_field),
-    };
-    validate_runtime_settings(&edited)?;
-    repo.save_app_settings(&edited)?;
+    validate_runtime_settings(&new_settings)?;
+    repo.save_app_settings(&new_settings)?;
     let saved = repo.load_app_settings()?;
     apply_runtime_worker_overrides(worker_tx, &saved)?;
     Ok(())

@@ -62,7 +62,9 @@ impl FromSql for ShortcutId {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+// TODO: Should we operate on app ids only?
 pub struct ShortcutMessage {
+    pub(crate) app_id: AppId,
     pub app: String,
     pub match_names: Vec<String>,
     pub shortcut: String,

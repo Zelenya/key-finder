@@ -2,6 +2,7 @@ use crate::application::shortcut_center::ShortcutCache;
 use crate::domain::errors::AppError;
 use crate::notifications::notification_payload;
 use crate::notifications::notifier::Notifier;
+use crate::storage::AppId;
 use std::sync::mpsc;
 use std::sync::Arc;
 use std::thread;
@@ -12,10 +13,17 @@ pub(crate) enum WorkerCommand {
     Stop,
     SetPaused(bool),
     SetInterval(Duration),
+    SetFocusApp(Option<AppId>),
 }
 
 pub(crate) struct NotificationService {
     worker: thread::JoinHandle<()>,
+}
+
+pub(crate) enum SelectedApp {
+    FocusedId(AppId),
+    GuestimatedName(String),
+    Unknown,
 }
 
 type CurrentAppProvider = Arc<dyn Fn() -> Option<String> + Send + Sync>;
@@ -45,14 +53,16 @@ fn spawn_notification_worker(
     current_app_provider: CurrentAppProvider,
 ) -> thread::JoinHandle<()> {
     thread::spawn(move || {
+        // TODO: Might be time to have a state struct
         let mut interval = interval;
         let mut paused = false;
+        let mut focused_app: Option<AppId> = None;
 
         loop {
             if !paused {
                 let current_shortcuts = shortcuts.snapshot();
-                let current_app = current_app_provider();
-                let content = notification_payload(&current_shortcuts, current_app.as_deref());
+                let selected_app = select_app(focused_app, &current_app_provider);
+                let content = notification_payload(&current_shortcuts, selected_app);
                 if let Err(err) = notifier.notify(&content) {
                     eprintln!("{err}");
                 }
@@ -62,9 +72,20 @@ fn spawn_notification_worker(
                 Ok(WorkerCommand::Stop) => break,
                 Ok(WorkerCommand::SetPaused(value)) => paused = value,
                 Ok(WorkerCommand::SetInterval(value)) => interval = value,
+                Ok(WorkerCommand::SetFocusApp(value)) => focused_app = value,
                 Err(mpsc::RecvTimeoutError::Timeout) => {}
                 Err(mpsc::RecvTimeoutError::Disconnected) => break,
             }
         }
     })
+}
+
+fn select_app(focused_app: Option<AppId>, current_app_provider: &CurrentAppProvider) -> SelectedApp {
+    if let Some(app_id) = focused_app {
+        SelectedApp::FocusedId(app_id)
+    } else if let Some(app_name) = current_app_provider() {
+        SelectedApp::GuestimatedName(app_name)
+    } else {
+        SelectedApp::Unknown
+    }
 }

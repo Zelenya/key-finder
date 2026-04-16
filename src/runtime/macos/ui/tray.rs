@@ -6,8 +6,8 @@ use crate::domain::models::AppConfig;
 use crate::notifications::notifier::NativeNotifier;
 use crate::runtime::macos::notifications::notify_runtime_error;
 use crate::runtime::macos::platform::frontmost;
-use crate::runtime::macos::ui::settings;
 use crate::runtime::macos::ui::shortcut_center;
+use crate::runtime::macos::ui::{app_focus, settings};
 use crate::storage::ShortcutMessage;
 use objc2::rc::Retained;
 use objc2::MainThreadMarker;
@@ -20,6 +20,7 @@ use tray_icon::{Icon, TrayIcon, TrayIconBuilder};
 struct TrayMenuIds {
     open_shortcuts: MenuId,
     open_settings: MenuId,
+    open_app_focus: MenuId,
     toggle_pause: MenuId,
     quit: MenuId,
 }
@@ -91,6 +92,14 @@ fn handle_menu_event(event: &MenuEvent, menu_ids: &TrayMenuIds, runtime: &TrayRu
         return;
     }
 
+    if event.id == menu_ids.open_app_focus {
+        if let Err(err) = app_focus::open_focus_app(&runtime.ui_config, &runtime.command_tx) {
+            eprintln!("{err}");
+            notify_runtime_error("App Focus failed", &err.to_string());
+        }
+        return;
+    }
+
     if event.id == menu_ids.toggle_pause {
         let was_paused = runtime.paused.fetch_xor(true, Ordering::SeqCst);
         let now_paused = !was_paused;
@@ -124,6 +133,12 @@ fn build_tray() -> Result<(TrayIcon, TrayMenuIds), AppError> {
     let open_settings_item = MenuItem::new("Settings", true, None);
     let open_settings_id = open_settings_item.id().clone();
     menu.append(&open_settings_item).map_err(|e| AppError::TrayMenu {
+        message: e.to_string(),
+    })?;
+
+    let open_app_focus_item = MenuItem::new("Focus on one App", true, None);
+    let open_app_focus_id = open_app_focus_item.id().clone();
+    menu.append(&open_app_focus_item).map_err(|e| AppError::TrayMenu {
         message: e.to_string(),
     })?;
 
@@ -163,6 +178,7 @@ fn build_tray() -> Result<(TrayIcon, TrayMenuIds), AppError> {
         TrayMenuIds {
             open_shortcuts: open_shortcuts_id,
             open_settings: open_settings_id,
+            open_app_focus: open_app_focus_id,
             toggle_pause: toggle_pause_id,
             quit: quit_id,
         },

@@ -1,3 +1,4 @@
+use crate::application::notifications::SelectedApp;
 use crate::constants::APP_NAME;
 use crate::domain::errors::AppError;
 use crate::domain::models::AppConfig;
@@ -12,7 +13,7 @@ pub(crate) fn run(config: AppConfig, initial_shortcuts: Vec<ShortcutMessage>) ->
     let notifier = TerminalNotifier::new(config.terminal_notifier_path.clone());
 
     loop {
-        let content = notification_payload(&initial_shortcuts, None);
+        let content = notification_payload(&initial_shortcuts, SelectedApp::Unknown);
         if let Err(err) = notifier.notify(&content) {
             eprintln!("{err}");
         }

@@ -45,6 +45,7 @@ mod tests {
     #[test]
     fn shorcut_cache_shares_snapshot_state() {
         let cache = ShortcutCache::new(vec![ShortcutMessage {
+            app_id: 1.into(),
             app: "Zed".to_string(),
             match_names: vec!["Zed".to_string()],
             shortcut: "⌘ B".to_string(),
@@ -53,6 +54,7 @@ mod tests {
         let clone = cache.clone();
 
         clone.replace(vec![ShortcutMessage {
+            app_id: 2.into(),
             app: "Visual Studio Code".to_string(),
             match_names: vec!["Visual Studio Code".to_string()],
             shortcut: "⌘ P".to_string(),
