@@ -1,4 +1,3 @@
-use super::super::super::window;
 use super::spec::{
     presentation_for, ImportDialogKind, ImportDialogPresentation, ImportDialogSpec, ImportDialogState,
     VsCodeImportMode,
@@ -7,6 +6,7 @@ use super::TAG_MODE_CHANGED;
 use super::{TAG_CHOOSE_FILE, TAG_CLEAR_FILE, TAG_CLOSE, TAG_IMPORT};
 use crate::domain::errors::AppError;
 use crate::runtime::macos::platform::import_sources;
+use crate::runtime::macos::ui::modal::populate_popup;
 use objc2::rc::Retained;
 use objc2::sel;
 use objc2::MainThreadMarker;
@@ -68,7 +68,7 @@ pub(super) fn build_import_window(
 
     let content = window
         .contentView()
-        .ok_or_else(|| AppError::StorageOperation("missing import dialog content view".to_string()))?;
+        .ok_or_else(|| AppError::UiOperation("missing import dialog content view".to_string()))?;
 
     let has_vscode_modes = !spec.kind.vscode_modes().is_empty();
     let default_presentation = presentation_for(spec, spec.kind.default_vscode_mode());
@@ -93,7 +93,7 @@ pub(super) fn build_import_window(
             popup.setAction(Some(sel!(stopModal)));
         }
         let items = spec.kind.vscode_modes().iter().map(|mode| mode.title().to_string()).collect::<Vec<_>>();
-        window::populate_popup(&popup, &items, 0);
+        populate_popup(&popup, &items, 0);
         content.addSubview(&popup);
         Some(popup)
     } else {
@@ -291,10 +291,10 @@ pub(super) fn prompt_for_import_file(
     let url = panel
         .URLs()
         .firstObject()
-        .ok_or_else(|| AppError::StorageOperation("file picker returned no selected file".to_string()))?;
+        .ok_or_else(|| AppError::UiOperation("file picker returned no selected file".to_string()))?;
     let path = url
         .to_file_path()
-        .ok_or_else(|| AppError::StorageOperation("selected import file was not a local path".to_string()))?;
+        .ok_or_else(|| AppError::UiOperation("selected import file was not a local path".to_string()))?;
     Ok(Some(path.display().to_string()))
 }
 

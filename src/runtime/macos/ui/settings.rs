@@ -2,6 +2,7 @@ use crate::application::notifications::WorkerCommand;
 use crate::application::runtime_settings::{self, parse_notify_interval};
 use crate::domain::errors::AppError;
 use crate::domain::models::AppConfig;
+use crate::runtime::macos::ui::modal::{add_modal_action_button, show_modal_error};
 use crate::storage::{AppSettings, SqliteDb, SqliteSettingsRepository};
 use humantime::format_duration;
 use objc2::rc::Retained;
@@ -9,8 +10,7 @@ use objc2::sel;
 use objc2::MainThreadMarker;
 use objc2::MainThreadOnly;
 use objc2_app_kit::{
-    NSAlert, NSApplication, NSBackingStoreType, NSButton, NSTextField, NSView, NSWindow, NSWindowButton,
-    NSWindowStyleMask,
+    NSApplication, NSBackingStoreType, NSTextField, NSView, NSWindow, NSWindowButton, NSWindowStyleMask,
 };
 use objc2_foundation::{NSPoint, NSRect, NSSize, NSString};
 use std::sync::mpsc;
@@ -72,7 +72,7 @@ fn open_settings_dialog(
             };
 
             if let Err(error) = save_settings(repo, worker_tx, edited) {
-                show_settings_error(&app, "Save failed", &error.to_string())?;
+                show_modal_error(&app, "Save failed", &error.to_string())?;
                 continue;
             }
 
@@ -114,7 +114,7 @@ fn apply_runtime_worker_overrides(
             settings,
             env_notify_interval.as_deref(),
         )?))
-        .map_err(|e| AppError::StorageOperation(format!("failed to send interval update: {e}")))?;
+        .map_err(|e| AppError::UiOperation(format!("failed to send interval update: {e}")))?;
     Ok(())
 }
 
@@ -167,7 +167,7 @@ fn build_settings_window(
 
     let content = window
         .contentView()
-        .ok_or_else(|| AppError::StorageOperation("missing settings window content view".to_string()))?;
+        .ok_or_else(|| AppError::UiOperation("missing settings window content view".to_string()))?;
 
     let notify_interval_field = add_labeled_text_field(
         &content,
@@ -184,7 +184,7 @@ fn build_settings_window(
         settings.terminal_notifier_path.as_deref().unwrap_or(""),
     );
 
-    add_action_button(
+    add_modal_action_button(
         &content,
         mtm,
         app,
@@ -195,7 +195,7 @@ fn build_settings_window(
         ),
         sel!(abortModal),
     );
-    add_action_button(
+    add_modal_action_button(
         &content,
         mtm,
         app,
@@ -244,23 +244,6 @@ fn add_labeled_text_field(
     field
 }
 
-fn add_action_button(
-    content: &NSView,
-    mtm: MainThreadMarker,
-    app: &NSApplication,
-    title: &str,
-    frame: NSRect,
-    action: objc2::runtime::Sel,
-) {
-    // SAFETY: `app` is the shared `NSApplication` on the main thread, and the
-    // provided selector is one of AppKit's standard modal-ending actions.
-    let button = unsafe {
-        NSButton::buttonWithTitle_target_action(&NSString::from_str(title), Some(app), Some(action), mtm)
-    };
-    button.setFrame(frame);
-    content.addSubview(&button);
-}
-
 fn read_optional_text_field(field: &NSTextField) -> Option<String> {
     let value = field.stringValue().to_string();
     let trimmed = value.trim();
@@ -269,19 +252,6 @@ fn read_optional_text_field(field: &NSTextField) -> Option<String> {
     } else {
         Some(trimmed.to_string())
     }
-}
-
-fn show_settings_error(app: &NSApplication, title: &str, message: &str) -> Result<(), AppError> {
-    let Some(mtm) = MainThreadMarker::new() else {
-        return Err(AppError::MainThreadRequired);
-    };
-    app.activate();
-    let alert = NSAlert::new(mtm);
-    alert.setMessageText(&NSString::from_str(title));
-    alert.setInformativeText(&NSString::from_str(message));
-    alert.addButtonWithTitle(&NSString::from_str("OK"));
-    let _ = alert.runModal();
-    Ok(())
 }
 
 #[cfg(test)]

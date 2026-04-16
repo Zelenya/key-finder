@@ -1,12 +1,12 @@
 use crate::domain::errors::AppError;
 use crate::runtime::macos::ui::dialogs::close_sheet;
+use crate::runtime::macos::ui::modal::{add_modal_action_button, show_modal_error};
 use objc2::rc::Retained;
 use objc2::sel;
 use objc2::MainThreadMarker;
 use objc2::MainThreadOnly;
 use objc2_app_kit::{
-    NSAlert, NSApplication, NSBackingStoreType, NSButton, NSTextField, NSView, NSWindow, NSWindowButton,
-    NSWindowStyleMask,
+    NSApplication, NSBackingStoreType, NSTextField, NSView, NSWindow, NSWindowButton, NSWindowStyleMask,
 };
 use objc2_foundation::{NSPoint, NSRect, NSSize, NSString};
 
@@ -41,7 +41,7 @@ pub(crate) fn prompt_new_shortcut(
             let shortcut = ui.shortcut_field.stringValue().to_string();
             let description = ui.description_field.stringValue().to_string();
             if shortcut.trim().is_empty() || description.trim().is_empty() {
-                show_inline_error(
+                show_modal_error(
                     &app,
                     "Both fields are required",
                     "Enter shortcut keys and a description before saving.",
@@ -89,7 +89,7 @@ fn build_new_shortcut_window(
 
     let content = window
         .contentView()
-        .ok_or_else(|| AppError::StorageOperation("missing new shortcut dialog content view".to_string()))?;
+        .ok_or_else(|| AppError::UiOperation("missing new shortcut dialog content view".to_string()))?;
 
     let intro = NSTextField::labelWithString(&NSString::from_str(new_shortcut_intro_text()), mtm);
     intro.setFrame(NSRect::new(NSPoint::new(20.0, 182.0), NSSize::new(660.0, 20.0)));
@@ -110,7 +110,7 @@ fn build_new_shortcut_window(
         "What should this shortcut do?",
     );
 
-    let cancel_button = add_action_button(
+    let cancel_button = add_modal_action_button(
         &content,
         mtm,
         app,
@@ -120,7 +120,7 @@ fn build_new_shortcut_window(
     );
     cancel_button.setKeyEquivalent(&NSString::from_str("\u{1b}"));
 
-    let save_button = add_action_button(
+    let save_button = add_modal_action_button(
         &content,
         mtm,
         app,
@@ -160,38 +160,6 @@ fn add_labeled_text_field(
     field.setSelectable(true);
     content.addSubview(&field);
     field
-}
-
-fn add_action_button(
-    content: &NSView,
-    mtm: MainThreadMarker,
-    app: &NSApplication,
-    title: &str,
-    frame: NSRect,
-    action: objc2::runtime::Sel,
-) -> Retained<NSButton> {
-    // SAFETY: `app` is the shared `NSApplication` on the main thread, and the
-    // provided selector is one of AppKit's standard modal-ending actions.
-    let button = unsafe {
-        NSButton::buttonWithTitle_target_action(&NSString::from_str(title), Some(app), Some(action), mtm)
-    };
-    button.setFrame(frame);
-    content.addSubview(&button);
-    button
-}
-
-fn show_inline_error(app: &NSApplication, title: &str, message: &str) -> Result<(), AppError> {
-    let Some(mtm) = MainThreadMarker::new() else {
-        return Err(AppError::MainThreadRequired);
-    };
-
-    app.activate();
-    let alert = NSAlert::new(mtm);
-    alert.setMessageText(&NSString::from_str(title));
-    alert.setInformativeText(&NSString::from_str(message));
-    alert.addButtonWithTitle(&NSString::from_str("OK"));
-    let _ = alert.runModal();
-    Ok(())
 }
 
 fn new_shortcut_intro_text() -> &'static str {

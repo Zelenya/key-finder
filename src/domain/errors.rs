@@ -30,6 +30,9 @@ to extend support, add a target-specific notifier backend in src/core/notifier.r
     #[error("storage operation failed: {0}")]
     StorageOperation(String),
 
+    #[error("ui operation failed: {0}")]
+    UiOperation(String),
+
     #[error("no shortcut importer found for app '{app}'. supported importers: {supported}")]
     ImporterNotFound { app: String, supported: String },
 

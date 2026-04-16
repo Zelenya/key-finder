@@ -1,14 +1,14 @@
 use crate::application::shortcut_center::{CreateAppInput, ShortcutCenterCommandService};
 use crate::domain::errors::AppError;
 use crate::runtime::macos::ui::dialogs::close_sheet;
+use crate::runtime::macos::ui::modal::{add_modal_action_button, show_modal_error};
 use crate::storage::AppId;
 use objc2::rc::Retained;
 use objc2::sel;
 use objc2::MainThreadMarker;
 use objc2::MainThreadOnly;
 use objc2_app_kit::{
-    NSAlert, NSApplication, NSBackingStoreType, NSButton, NSTextField, NSView, NSWindow, NSWindowButton,
-    NSWindowStyleMask,
+    NSApplication, NSBackingStoreType, NSTextField, NSView, NSWindow, NSWindowButton, NSWindowStyleMask,
 };
 use objc2_foundation::{NSPoint, NSRect, NSSize, NSString};
 
@@ -64,7 +64,7 @@ pub(crate) fn open_new_app_dialog(
                     });
                 }
                 Err(error) => {
-                    show_error(&app, "Couldn't create app", &error.to_string())?;
+                    show_modal_error(&app, "Couldn't create app", &error.to_string())?;
                     continue;
                 }
             }
@@ -102,7 +102,7 @@ fn build_new_app_window(mtm: MainThreadMarker, app: &NSApplication) -> Result<Ne
 
     let content = window
         .contentView()
-        .ok_or_else(|| AppError::StorageOperation("missing new app dialog content view".to_string()))?;
+        .ok_or_else(|| AppError::UiOperation("missing new app dialog content view".to_string()))?;
 
     let intro = NSTextField::labelWithString(
         &NSString::from_str("Create a custom app, then import a CSV or add shortcuts manually."),
@@ -126,7 +126,7 @@ fn build_new_app_window(mtm: MainThreadMarker, app: &NSApplication) -> Result<Ne
         "Comma-separated alternate names, like Code, VS Code",
     );
 
-    add_action_button(
+    add_modal_action_button(
         &content,
         mtm,
         app,
@@ -134,7 +134,7 @@ fn build_new_app_window(mtm: MainThreadMarker, app: &NSApplication) -> Result<Ne
         NSRect::new(NSPoint::new(420.0, 18.0), NSSize::new(90.0, 30.0)),
         sel!(abortModal),
     );
-    add_action_button(
+    add_modal_action_button(
         &content,
         mtm,
         app,
@@ -175,36 +175,6 @@ fn add_labeled_text_field(
     field
 }
 
-fn add_action_button(
-    content: &NSView,
-    mtm: MainThreadMarker,
-    app: &NSApplication,
-    title: &str,
-    frame: NSRect,
-    action: objc2::runtime::Sel,
-) {
-    // SAFETY: `app` is the shared `NSApplication` on the main thread, and the
-    // provided selector is one of AppKit's standard modal-ending actions.
-    let button = unsafe {
-        NSButton::buttonWithTitle_target_action(&NSString::from_str(title), Some(app), Some(action), mtm)
-    };
-    button.setFrame(frame);
-    content.addSubview(&button);
-}
-
 fn parse_aliases(raw: &str) -> Vec<String> {
     raw.split(',').map(str::trim).filter(|value| !value.is_empty()).map(str::to_string).collect()
-}
-
-fn show_error(app: &NSApplication, title: &str, message: &str) -> Result<(), AppError> {
-    let Some(mtm) = MainThreadMarker::new() else {
-        return Err(AppError::MainThreadRequired);
-    };
-    app.activate();
-    let alert = NSAlert::new(mtm);
-    alert.setMessageText(&NSString::from_str(title));
-    alert.setInformativeText(&NSString::from_str(message));
-    alert.addButtonWithTitle(&NSString::from_str("OK"));
-    let _ = alert.runModal();
-    Ok(())
 }

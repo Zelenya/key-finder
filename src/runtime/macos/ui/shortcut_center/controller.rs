@@ -8,6 +8,7 @@ use crate::application::shortcut_center::{
 use crate::domain::errors::AppError;
 use crate::domain::models::AppConfig;
 use crate::runtime::macos::platform::frontmost;
+use crate::runtime::macos::ui::modal::populate_popup;
 use crate::storage::{AppId, AppSummary, ManagedShortcut, SqliteDb};
 use objc2::rc::Retained;
 use objc2::MainThreadMarker;
@@ -105,7 +106,7 @@ fn initialize_shortcut_center(
     app.activate();
     let bridge = table::ShortcutCenterBridge::new(mtm);
     let ui = window::build_shortcut_center_window(mtm, bridge)?;
-    window::populate_popup(
+    populate_popup(
         &ui.shortcuts_pane.filter_popup,
         &[
             FILTER_ACTIVE_ONLY.to_string(),
@@ -176,7 +177,7 @@ fn select_app(
         .unwrap_or(0)
         .min(apps.len().saturating_sub(1));
 
-    window::populate_popup(
+    populate_popup(
         &ui.shortcuts_pane.app_popup,
         &apps.iter().map(|app| app.name.clone()).collect::<Vec<_>>(),
         app_index,

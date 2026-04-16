@@ -1,29 +1,23 @@
 pub mod notifier;
 
-use crate::application::notifications::SelectedApp;
 use crate::domain::app_norm::{app_matches_any, app_names_match};
 use crate::domain::models::NotificationContent;
+use crate::storage::AppId;
 use crate::storage::ShortcutMessage;
 use rand::prelude::*;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum SelectedApp {
+    FocusedId(AppId),
+    GuestimatedName(String),
+    Unknown,
+}
 
 pub(crate) fn notification_payload(
     shortcuts: &[ShortcutMessage],
     current_app: SelectedApp,
 ) -> NotificationContent {
-    let matching =
-        shortcuts.iter().filter(|shortcut| matches_current_app(shortcut, &current_app)).collect::<Vec<_>>();
-
-    let active = match current_app {
-        SelectedApp::FocusedId(_) => matching,
-        SelectedApp::GuestimatedName(_) | SelectedApp::Unknown => {
-            if matching.is_empty() {
-                shortcuts.iter().collect::<Vec<_>>()
-            } else {
-                matching
-            }
-        }
-    };
-
+    let active = active_shortcuts(shortcuts, &current_app);
     let mut rng = rand::rng();
 
     if let Some(entry) = active.choose(&mut rng) {
@@ -46,25 +40,37 @@ pub(crate) fn notification_payload(
     }
 }
 
-// TODO: We can skip the filtering if the app is unknown
-fn matches_current_app(shortcut: &ShortcutMessage, current_app: &SelectedApp) -> bool {
+fn active_shortcuts<'a>(
+    shortcuts: &'a [ShortcutMessage],
+    current_app: &SelectedApp,
+) -> Vec<&'a ShortcutMessage> {
     match current_app {
-        SelectedApp::FocusedId(id) => shortcut.app_id == *id,
+        SelectedApp::Unknown => shortcuts.iter().collect(),
+        SelectedApp::FocusedId(id) => shortcuts.iter().filter(|shortcut| shortcut.app_id == *id).collect(),
         SelectedApp::GuestimatedName(name) => {
-            if shortcut.match_names.is_empty() {
-                app_names_match(&shortcut.app, name)
+            let matching = shortcuts
+                .iter()
+                .filter(|shortcut| {
+                    if shortcut.match_names.is_empty() {
+                        app_names_match(&shortcut.app, name)
+                    } else {
+                        app_matches_any(&shortcut.match_names, name)
+                    }
+                })
+                .collect::<Vec<_>>();
+
+            if matching.is_empty() {
+                shortcuts.iter().collect()
             } else {
-                app_matches_any(&shortcut.match_names, name)
+                matching
             }
         }
-        SelectedApp::Unknown => false,
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::notification_payload;
-    use crate::application::notifications::SelectedApp;
+    use super::{notification_payload, SelectedApp};
     use crate::storage::ShortcutMessage;
 
     #[test]

@@ -3,15 +3,16 @@ use std::sync::mpsc;
 use objc2::sel;
 use objc2::{rc::Retained, MainThreadMarker, MainThreadOnly};
 use objc2_app_kit::{
-    NSAlert, NSApplication, NSBackingStoreType, NSButton, NSPopUpButton, NSTextField, NSView, NSWindow,
-    NSWindowButton, NSWindowStyleMask,
+    NSApplication, NSBackingStoreType, NSPopUpButton, NSTextField, NSWindow, NSWindowButton,
+    NSWindowStyleMask,
 };
-use objc2_foundation::{NSArray, NSPoint, NSRect, NSSize, NSString};
+use objc2_foundation::{NSPoint, NSRect, NSSize, NSString};
 
-use crate::storage::{AppId, AppSummary, SqliteShortcutCatalogRepository};
+use crate::storage::{AppSummary, SqliteShortcutCatalogRepository};
 use crate::{
-    application::notifications::WorkerCommand,
+    application::notifications::{AppFocusState, WorkerCommand},
     domain::{errors::AppError, models::AppConfig},
+    runtime::macos::ui::modal::{add_modal_action_button, populate_popup, show_modal_error},
     storage::SqliteDb,
 };
 
@@ -61,9 +62,9 @@ fn open_focus_app_dialog(
             return Ok(FocusAppDialogResult::Canceled);
         }
         if response == objc2_app_kit::NSModalResponseStop {
-            let app_id = get_selected_app_id(&ui.app_popup, &all_apps);
-            if let Err(error) = focus_on_app(worker_tx, app_id) {
-                show_app_focus_error(&app, "Save failed", &error.to_string())?;
+            let focus_state = selected_focus_state(&ui.app_popup, &all_apps)?;
+            if let Err(error) = focus_on_app(worker_tx, focus_state) {
+                show_modal_error(&app, "Save failed", &error.to_string())?;
                 continue;
             }
 
@@ -76,25 +77,19 @@ fn open_focus_app_dialog(
     }
 }
 
-fn get_selected_app_id(popup: &NSPopUpButton, all_apps: &[AppSummary]) -> Option<AppId> {
-    popup
-        .titleOfSelectedItem()
-        .map(|value| value.to_string())
-        .and_then(|selected| all_apps.iter().find(|app| app.name == selected).map(|app| app.app_id))
-}
-
-fn focus_on_app(worker_tx: &mpsc::Sender<WorkerCommand>, app_id: Option<AppId>) -> Result<(), AppError> {
+fn focus_on_app(worker_tx: &mpsc::Sender<WorkerCommand>, focus_state: AppFocusState) -> Result<(), AppError> {
     worker_tx
-        .send(WorkerCommand::SetFocusApp(app_id))
-        .map_err(|e| AppError::StorageOperation(format!("failed to send app focus update: {e}")))
+        .send(WorkerCommand::SetFocus(focus_state))
+        .map_err(|e| AppError::UiOperation(format!("failed to send app focus update: {e}")))
 }
 
-const WINDOW_WIDTH: f64 = 680.0;
+const WINDOW_WIDTH: f64 = 500.0;
 const WINDOW_HEIGHT: f64 = 220.0;
 const CONTENT_LEFT: f64 = 20.0;
-const CONTENT_WIDTH: f64 = 640.0;
+const CONTENT_WIDTH: f64 = WINDOW_WIDTH - (CONTENT_LEFT * 2.0);
 const ACTION_BUTTON_WIDTH: f64 = 90.0;
 const ACTION_BUTTON_HEIGHT: f64 = 30.0;
+const ACTION_BUTTON_GAP: f64 = 10.0;
 const LABEL_HEIGHT: f64 = 20.0;
 const FIELD_LABEL_OFFSET_Y: f64 = 24.0;
 
@@ -130,11 +125,11 @@ fn build_focus_app_window(
 
     let content = window
         .contentView()
-        .ok_or_else(|| AppError::StorageOperation("missing app focus window content view".to_string()))?;
+        .ok_or_else(|| AppError::UiOperation("missing app focus window content view".to_string()))?;
 
     // Label
     let label_view = NSTextField::labelWithString(
-        &NSString::from_str("Only show the shortcuts for the selected app"),
+        &NSString::from_str("Choose the app to focus notifications on, or keep following the current app"),
         mtm,
     );
     label_view.setFrame(NSRect::new(
@@ -154,28 +149,31 @@ fn build_focus_app_window(
     );
     content.addSubview(&app_popup);
 
-    // TODO: First element should be None? Or a separate flag for no focus?
+    let default_option = "Follow current app".to_string();
+    let items = std::iter::once(default_option).chain(app_names).collect::<Vec<_>>();
+    populate_popup(&app_popup, &items, 0);
 
-    populate_popup(&app_popup, &app_names, 0);
+    let save_button_x = WINDOW_WIDTH - CONTENT_LEFT - ACTION_BUTTON_WIDTH;
+    let cancel_button_x = save_button_x - ACTION_BUTTON_GAP - ACTION_BUTTON_WIDTH;
 
-    add_action_button(
+    add_modal_action_button(
         &content,
         mtm,
         app,
         "Cancel",
         NSRect::new(
-            NSPoint::new(490.0, 20.0),
+            NSPoint::new(cancel_button_x, 20.0),
             NSSize::new(ACTION_BUTTON_WIDTH, ACTION_BUTTON_HEIGHT),
         ),
         sel!(abortModal),
     );
-    add_action_button(
+    add_modal_action_button(
         &content,
         mtm,
         app,
         "Save",
         NSRect::new(
-            NSPoint::new(580.0, 20.0),
+            NSPoint::new(save_button_x, 20.0),
             NSSize::new(ACTION_BUTTON_WIDTH, ACTION_BUTTON_HEIGHT),
         ),
         sel!(stopModal),
@@ -184,43 +182,24 @@ fn build_focus_app_window(
     Ok(FocusAppWindowUi { window, app_popup })
 }
 
-// TODO: Copy-pasted from shortcut_center.rs, dedupe
-fn populate_popup(popup: &NSPopUpButton, items: &[String], selected_index: usize) {
-    popup.removeAllItems();
-    let ns_items = items.iter().map(|item| NSString::from_str(item)).collect::<Vec<_>>();
-    let array = NSArray::from_retained_slice(&ns_items);
-    popup.addItemsWithTitles(&array);
-    if !items.is_empty() {
-        popup.selectItemAtIndex(selected_index.min(items.len() - 1) as _);
+fn selected_focus_state(
+    app_popup: &NSPopUpButton,
+    all_apps: &[AppSummary],
+) -> Result<AppFocusState, AppError> {
+    match app_popup.indexOfSelectedItem() {
+        0 => Ok(AppFocusState::FollowCurrentApp),
+        _ => {
+            let app_name = app_popup
+                .titleOfSelectedItem()
+                .map(|value| value.to_string())
+                .ok_or_else(|| AppError::UiOperation("focused app selection is missing".to_string()))?;
+
+            let app_id =
+                all_apps.iter().find(|app| app.name == app_name).map(|app| app.app_id).ok_or_else(|| {
+                    AppError::StorageOperation("selected focused app is no longer available".to_string())
+                })?;
+
+            Ok(AppFocusState::FocusOn(app_id))
+        }
     }
-}
-
-fn add_action_button(
-    content: &NSView,
-    mtm: MainThreadMarker,
-    app: &NSApplication,
-    title: &str,
-    frame: NSRect,
-    action: objc2::runtime::Sel,
-) {
-    // SAFETY: `app` is the shared `NSApplication` on the main thread, and the
-    // provided selector is one of AppKit's standard modal-ending actions.
-    let button = unsafe {
-        NSButton::buttonWithTitle_target_action(&NSString::from_str(title), Some(app), Some(action), mtm)
-    };
-    button.setFrame(frame);
-    content.addSubview(&button);
-}
-
-fn show_app_focus_error(app: &NSApplication, title: &str, message: &str) -> Result<(), AppError> {
-    let Some(mtm) = MainThreadMarker::new() else {
-        return Err(AppError::MainThreadRequired);
-    };
-    app.activate();
-    let alert = NSAlert::new(mtm);
-    alert.setMessageText(&NSString::from_str(title));
-    alert.setInformativeText(&NSString::from_str(message));
-    alert.addButtonWithTitle(&NSString::from_str("OK"));
-    let _ = alert.runModal();
-    Ok(())
 }

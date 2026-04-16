@@ -9,7 +9,7 @@ use objc2_app_kit::{
     NSSplitViewDividerStyle, NSTextField, NSView, NSWindow, NSWindowButton, NSWindowFrameAutosaveName,
     NSWindowStyleMask,
 };
-use objc2_foundation::{NSArray, NSPoint, NSRect, NSSize, NSString};
+use objc2_foundation::{NSPoint, NSRect, NSSize, NSString};
 
 const WINDOW_WIDTH: f64 = 1100.0;
 const WINDOW_HEIGHT: f64 = 720.0;
@@ -55,7 +55,7 @@ pub(super) fn build_shortcut_center_window(
 
     let content = window
         .contentView()
-        .ok_or_else(|| AppError::StorageOperation("missing window content view".to_string()))?;
+        .ok_or_else(|| AppError::UiOperation("missing window content view".to_string()))?;
 
     let split_view = NSSplitView::initWithFrame(
         NSSplitView::alloc(mtm),
@@ -295,16 +295,6 @@ fn add_action_button(
     button.setFrame(frame);
     content.addSubview(&button);
     button
-}
-
-pub(super) fn populate_popup(popup: &NSPopUpButton, items: &[String], selected_index: usize) {
-    popup.removeAllItems();
-    let ns_items = items.iter().map(|item| NSString::from_str(item)).collect::<Vec<_>>();
-    let array = NSArray::from_retained_slice(&ns_items);
-    popup.addItemsWithTitles(&array);
-    if !items.is_empty() {
-        popup.selectItemAtIndex(selected_index.min(items.len() - 1) as _);
-    }
 }
 
 pub(super) fn popup_selected_title(popup: &NSPopUpButton) -> Option<String> {

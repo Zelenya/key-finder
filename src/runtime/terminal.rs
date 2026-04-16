@@ -1,9 +1,9 @@
-use crate::application::notifications::SelectedApp;
 use crate::constants::APP_NAME;
 use crate::domain::errors::AppError;
 use crate::domain::models::AppConfig;
 use crate::notifications::notification_payload;
 use crate::notifications::notifier::{Notifier, TerminalNotifier};
+use crate::notifications::SelectedApp;
 use crate::storage::ShortcutMessage;
 use std::thread;
 
