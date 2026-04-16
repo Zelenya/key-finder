@@ -19,10 +19,10 @@ to extend support, add target-specific notifier implementations in src/domain/no
         );
     }
 
-    let (config, initial_shortcuts) = Cli::parse()
+    let config = Cli::parse()
         .into_runtime_inputs()
         .context("failed to build app configuration from CLI, environment, and SQLite settings")?;
 
-    commands::run(config, initial_shortcuts).context("key finder runtime failed")?;
+    commands::run(config).context("key finder runtime failed")?;
     Ok(())
 }

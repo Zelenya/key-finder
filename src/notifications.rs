@@ -1,9 +1,7 @@
 pub mod notifier;
 
-use crate::domain::app_norm::{app_matches_any, app_names_match};
 use crate::domain::models::NotificationContent;
-use crate::storage::AppId;
-use crate::storage::ShortcutMessage;
+use crate::storage::{AppId, NotificationSnapshot};
 use rand::prelude::*;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -14,56 +12,37 @@ pub(crate) enum SelectedApp {
 }
 
 pub(crate) fn notification_payload(
-    shortcuts: &[ShortcutMessage],
+    snapshot: &NotificationSnapshot,
     current_app: SelectedApp,
 ) -> NotificationContent {
-    let active = active_shortcuts(shortcuts, &current_app);
     let mut rng = rand::rng();
 
-    if let Some(entry) = active.choose(&mut rng) {
+    let entry = match &current_app {
+        SelectedApp::Unknown => snapshot.shortcuts.iter().choose(&mut rng),
+        SelectedApp::FocusedId(id) => snapshot.shortcuts_for_app(*id).choose(&mut rng),
+        SelectedApp::GuestimatedName(name) => match snapshot.resolve_guessed_app(name) {
+            Some(app_id) => snapshot.shortcuts_for_app(app_id).choose(&mut rng),
+            None => snapshot.shortcuts.iter().choose(&mut rng),
+        },
+    };
+
+    if let Some(entry) = entry {
         NotificationContent {
-            title: format!("Shortcut for {}", entry.app),
+            title: format!("Shortcut for {}", snapshot.app_name(entry.app_id)),
             subtitle: Some(entry.shortcut.clone()),
             message: entry.description.clone(),
         }
     } else {
-        let current_app = match current_app {
-            SelectedApp::FocusedId(_) => "focused app".to_string(),
-            SelectedApp::GuestimatedName(name) => name,
-            SelectedApp::Unknown => "unknown app".to_string(),
+        let empty_state_name = match &current_app {
+            SelectedApp::FocusedId(app_id) => snapshot.app_name(*app_id),
+            SelectedApp::GuestimatedName(name) => name.as_str(),
+            SelectedApp::Unknown => "unknown app",
         };
+
         NotificationContent {
-            title: format!("No shortcuts found for {}", current_app),
+            title: format!("No shortcuts found for {}", empty_state_name),
             subtitle: None,
             message: "Use the app dashboard to find shortcuts".to_string(),
-        }
-    }
-}
-
-fn active_shortcuts<'a>(
-    shortcuts: &'a [ShortcutMessage],
-    current_app: &SelectedApp,
-) -> Vec<&'a ShortcutMessage> {
-    match current_app {
-        SelectedApp::Unknown => shortcuts.iter().collect(),
-        SelectedApp::FocusedId(id) => shortcuts.iter().filter(|shortcut| shortcut.app_id == *id).collect(),
-        SelectedApp::GuestimatedName(name) => {
-            let matching = shortcuts
-                .iter()
-                .filter(|shortcut| {
-                    if shortcut.match_names.is_empty() {
-                        app_names_match(&shortcut.app, name)
-                    } else {
-                        app_matches_any(&shortcut.match_names, name)
-                    }
-                })
-                .collect::<Vec<_>>();
-
-            if matching.is_empty() {
-                shortcuts.iter().collect()
-            } else {
-                matching
-            }
         }
     }
 }
@@ -71,29 +50,43 @@ fn active_shortcuts<'a>(
 #[cfg(test)]
 mod tests {
     use super::{notification_payload, SelectedApp};
-    use crate::storage::ShortcutMessage;
+    use crate::storage::{NotificationApp, NotificationShortcut, NotificationSnapshot};
+
+    fn snapshot(apps: Vec<NotificationApp>, shortcuts: Vec<NotificationShortcut>) -> NotificationSnapshot {
+        NotificationSnapshot { apps, shortcuts }
+    }
 
     #[test]
     fn payload_prefers_current_app_shortcuts() {
-        let shortcuts = vec![
-            ShortcutMessage {
-                app_id: 3.into(),
-                app: "Zed".to_string(),
-                match_names: vec!["Zed".to_string()],
-                shortcut: "⌘ B".to_string(),
-                description: "Toggle left bar".to_string(),
-            },
-            ShortcutMessage {
-                app_id: 1.into(),
-                app: "Code".to_string(),
-                match_names: vec!["Code".to_string(), "Visual Studio Code".to_string()],
-                shortcut: "⌘ P".to_string(),
-                description: "Go to file".to_string(),
-            },
-        ];
+        let snapshot = snapshot(
+            vec![
+                NotificationApp {
+                    app_id: 3.into(),
+                    name: "Zed".to_string(),
+                    aliases: vec!["Zed".to_string()],
+                },
+                NotificationApp {
+                    app_id: 1.into(),
+                    name: "Code".to_string(),
+                    aliases: vec!["Code".to_string(), "Visual Studio Code".to_string()],
+                },
+            ],
+            vec![
+                NotificationShortcut {
+                    app_id: 3.into(),
+                    shortcut: "⌘ B".to_string(),
+                    description: "Toggle left bar".to_string(),
+                },
+                NotificationShortcut {
+                    app_id: 1.into(),
+                    shortcut: "⌘ P".to_string(),
+                    description: "Go to file".to_string(),
+                },
+            ],
+        );
 
         let payload = notification_payload(
-            &shortcuts,
+            &snapshot,
             SelectedApp::GuestimatedName("Visual Studio Code".to_string()),
         );
         assert!(payload.title.contains("Code"));
@@ -101,30 +94,85 @@ mod tests {
 
     #[test]
     fn payload_matches_alias_names() {
-        let shortcuts = vec![ShortcutMessage {
-            app_id: 2.into(),
-            app: "Acme Studio".to_string(),
-            match_names: vec!["Acme Studio".to_string(), "Acme".to_string()],
-            shortcut: "⌘ K".to_string(),
-            description: "Do the thing".to_string(),
-        }];
+        let snapshot = snapshot(
+            vec![NotificationApp {
+                app_id: 2.into(),
+                name: "Foo Studio".to_string(),
+                aliases: vec!["Foo Studio".to_string(), "Foo".to_string()],
+            }],
+            vec![NotificationShortcut {
+                app_id: 2.into(),
+                shortcut: "⌘ K".to_string(),
+                description: "Do the thing".to_string(),
+            }],
+        );
 
-        let payload = notification_payload(&shortcuts, SelectedApp::GuestimatedName("Acme".to_string()));
-        assert!(payload.title.contains("Acme Studio"));
+        let payload = notification_payload(&snapshot, SelectedApp::GuestimatedName("Foo".to_string()));
+        assert!(payload.title.contains("Foo Studio"));
+    }
+
+    #[test]
+    fn payload_falls_back_to_all_shortcuts_when_guessed_name_has_no_match() {
+        let snapshot = snapshot(
+            vec![NotificationApp {
+                app_id: 2.into(),
+                name: "Foo Studio".to_string(),
+                aliases: vec!["Foo Studio".to_string(), "Foo".to_string()],
+            }],
+            vec![NotificationShortcut {
+                app_id: 2.into(),
+                shortcut: "⌘ K".to_string(),
+                description: "Do the thing".to_string(),
+            }],
+        );
+
+        let payload = notification_payload(&snapshot, SelectedApp::GuestimatedName("Safari".to_string()));
+        assert!(payload.title.contains("Foo Studio"));
+    }
+
+    #[test]
+    fn payload_uses_all_shortcuts_when_current_app_is_unknown() {
+        let snapshot = snapshot(
+            vec![NotificationApp {
+                app_id: 2.into(),
+                name: "Foo Studio".to_string(),
+                aliases: vec!["Foo".to_string()],
+            }],
+            vec![NotificationShortcut {
+                app_id: 2.into(),
+                shortcut: "⌘ K".to_string(),
+                description: "Do the thing".to_string(),
+            }],
+        );
+
+        let payload = notification_payload(&snapshot, SelectedApp::Unknown);
+        assert!(payload.title.contains("Foo Studio"));
     }
 
     #[test]
     fn payload_is_empty_when_focus_app_has_no_shortcuts() {
-        let shortcuts = vec![ShortcutMessage {
-            app_id: 2.into(),
-            app: "Foo Studio".to_string(),
-            match_names: vec!["Foo Studio".to_string(), "Foo".to_string()],
-            shortcut: "⌘ K".to_string(),
-            description: "Do the thing".to_string(),
-        }];
+        let snapshot = snapshot(
+            vec![
+                NotificationApp {
+                    app_id: 1.into(),
+                    name: "Empty App".to_string(),
+                    aliases: vec!["Empty".to_string()],
+                },
+                NotificationApp {
+                    app_id: 2.into(),
+                    name: "Foo Studio".to_string(),
+                    aliases: vec!["Foo Studio".to_string(), "Foo".to_string()],
+                },
+            ],
+            vec![NotificationShortcut {
+                app_id: 3.into(),
+                shortcut: "⌘ K".to_string(),
+                description: "Do the thing".to_string(),
+            }],
+        );
 
-        let payload = notification_payload(&shortcuts, SelectedApp::FocusedId(1.into()));
-        assert_eq!(payload.title, "No shortcuts found for focused app");
+        let payload = notification_payload(&snapshot, SelectedApp::FocusedId(1.into()));
+        assert_eq!(payload.title, "No shortcuts found for Empty App");
         assert!(payload.subtitle.is_none());
     }
 }

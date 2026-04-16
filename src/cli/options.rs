@@ -1,7 +1,6 @@
 use crate::application::runtime_settings::{resolve_notify_interval, resolve_terminal_notifier_path};
 use crate::domain::errors::AppError;
 use crate::domain::models::AppConfig;
-use crate::storage::ShortcutMessage;
 use crate::storage::SqliteDb;
 use clap::Parser;
 use std::env;
@@ -28,11 +27,10 @@ pub struct Cli {
 }
 
 impl Cli {
-    pub fn into_runtime_inputs(self) -> Result<(AppConfig, Vec<ShortcutMessage>), AppError> {
+    pub fn into_runtime_inputs(self) -> Result<AppConfig, AppError> {
         let database_path = resolve_database_path(self.database_path)?;
         let db = SqliteDb::open(&database_path)?;
         let settings_repo = db.settings_repository();
-        let notification_snapshot_repo = db.notification_snapshot_repository();
         let db_settings = settings_repo.load_app_settings()?;
         let env_terminal_notifier_path = env::var("TERMINAL_NOTIFIER_PATH").ok();
         let env_notify_interval = env::var("NOTIFY_INTERVAL").ok();
@@ -48,18 +46,14 @@ impl Cli {
             db_settings.notify_interval.as_deref(),
         )?;
 
-        let shortcuts = notification_snapshot_repo.load_notification_shortcuts()?;
         let is_bundled = detect_bundled_app();
 
-        Ok((
-            AppConfig {
-                is_bundled,
-                terminal_notifier_path,
-                interval,
-                database_path,
-            },
-            shortcuts,
-        ))
+        Ok(AppConfig {
+            is_bundled,
+            terminal_notifier_path,
+            interval,
+            database_path,
+        })
     }
 }
 

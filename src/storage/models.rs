@@ -1,3 +1,4 @@
+use crate::domain::app_norm::{app_matches_any, app_names_match};
 use crate::domain::known_apps::KnownImporterFamily;
 use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ToSql, ToSqlOutput, ValueRef};
 
@@ -62,13 +63,46 @@ impl FromSql for ShortcutId {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-// TODO: Should we operate on app ids only?
-pub struct ShortcutMessage {
+pub(crate) struct NotificationShortcut {
     pub(crate) app_id: AppId,
-    pub app: String,
-    pub match_names: Vec<String>,
-    pub shortcut: String,
-    pub description: String,
+    pub(crate) shortcut: String,
+    pub(crate) description: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct NotificationApp {
+    pub(crate) app_id: AppId,
+    pub(crate) name: String,
+    pub(crate) aliases: Vec<String>,
+}
+
+impl NotificationApp {
+    fn matches_given_name(&self, name: &str) -> bool {
+        app_names_match(&self.name, name) || app_matches_any(&self.aliases, name)
+    }
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub(crate) struct NotificationSnapshot {
+    pub(crate) shortcuts: Vec<NotificationShortcut>,
+    pub(crate) apps: Vec<NotificationApp>,
+}
+
+impl NotificationSnapshot {
+    pub(crate) fn shortcuts_for_app(
+        &self,
+        app_id: AppId,
+    ) -> impl Iterator<Item = &NotificationShortcut> + '_ {
+        self.shortcuts.iter().filter(move |shortcut| shortcut.app_id == app_id)
+    }
+
+    pub(crate) fn resolve_guessed_app(&self, app_name: &str) -> Option<AppId> {
+        self.apps.iter().find(|app| app.matches_given_name(app_name)).map(|app| app.app_id)
+    }
+
+    pub(crate) fn app_name(&self, app_id: AppId) -> &str {
+        self.apps.iter().find(|app| app.app_id == app_id).map_or("Unknown App", |app| app.name.as_str())
+    }
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]

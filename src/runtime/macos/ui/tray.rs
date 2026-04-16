@@ -8,7 +8,7 @@ use crate::runtime::macos::notifications::notify_runtime_error;
 use crate::runtime::macos::platform::frontmost;
 use crate::runtime::macos::ui::shortcut_center;
 use crate::runtime::macos::ui::{app_focus, settings};
-use crate::storage::ShortcutMessage;
+use crate::storage::NotificationSnapshot;
 use objc2::rc::Retained;
 use objc2::MainThreadMarker;
 use objc2_app_kit::{NSApplication, NSApplicationActivationPolicy};
@@ -32,11 +32,11 @@ struct TrayRuntime {
     paused: Arc<AtomicBool>,
 }
 
-pub(crate) fn run(config: AppConfig, initial_shortcuts: Vec<ShortcutMessage>) -> Result<(), AppError> {
+pub(crate) fn run(config: AppConfig, initial_snapshot: NotificationSnapshot) -> Result<(), AppError> {
     let app = ensure_appkit_initialized()?;
     println!("Starting Key Finder in tray mode.");
 
-    let shortcuts = ShortcutCache::new(initial_shortcuts);
+    let shortcuts = ShortcutCache::new(initial_snapshot);
     let (command_tx, worker_service) = start_notification_service(
         config.interval,
         shortcuts.clone(),

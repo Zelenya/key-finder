@@ -4,14 +4,14 @@ mod terminal;
 
 use crate::domain::errors::AppError;
 use crate::domain::models::AppConfig;
-use crate::storage::ShortcutMessage;
+use crate::storage::NotificationSnapshot;
 
 // If the app is bundled, run the tray UI. Otherwise, run the dev-mode terminal notifier.
-pub(crate) fn run(config: AppConfig, initial_shortcuts: Vec<ShortcutMessage>) -> Result<(), AppError> {
+pub(crate) fn run(config: AppConfig, initial_snapshot: NotificationSnapshot) -> Result<(), AppError> {
     if config.is_bundled {
         #[cfg(target_os = "macos")]
         {
-            macos::ui::tray::run(config, initial_shortcuts)
+            macos::ui::tray::run(config, initial_snapshot)
         }
 
         #[cfg(not(target_os = "macos"))]
@@ -19,6 +19,6 @@ pub(crate) fn run(config: AppConfig, initial_shortcuts: Vec<ShortcutMessage>) ->
             Err(AppError::UnsupportedPlatform)
         }
     } else {
-        terminal::run(config, initial_shortcuts)
+        terminal::run(config, initial_snapshot)
     }
 }

@@ -136,7 +136,7 @@ impl ShortcutCenterCommandService {
     }
 
     fn refresh_snapshot(&self) -> Result<(), AppError> {
-        let refreshed = self.notification_snapshot_repo.load_notification_shortcuts()?;
+        let refreshed = self.notification_snapshot_repo.load_notification_snapshot()?;
         self.shortcut_cache.replace(refreshed);
         Ok(())
     }
@@ -182,8 +182,8 @@ mod tests {
         service.add_shortcut(app_id, "⌘ P", "Go to file").expect("add shortcut");
 
         let snapshot = service.shortcut_cache.snapshot();
-        assert_eq!(snapshot.len(), 1);
-        assert_eq!(snapshot[0].description, "Go to file");
+        assert_eq!(snapshot.shortcuts.len(), 1);
+        assert_eq!(snapshot.shortcuts[0].description, "Go to file");
     }
 
     #[test]
@@ -209,7 +209,7 @@ mod tests {
             .expect("import shortcuts");
 
         assert_eq!(result.summary.added, 1);
-        assert!(service.shortcut_cache.snapshot().is_empty());
+        assert!(service.shortcut_cache.snapshot().shortcuts.is_empty());
     }
 
     #[test]
@@ -241,7 +241,7 @@ mod tests {
         let apps = SqliteAppsRepository::new(db.clone());
         let shortcuts = SqliteShortcutsRepository::new(db.clone());
         let imports = SqliteShortcutImportsRepository::new(db);
-        let cache = ShortcutCache::new(Vec::new());
+        let cache = ShortcutCache::new(Default::default());
         let service =
             ShortcutCenterCommandService::new(apps, shortcuts, catalog, snapshot_queries, imports, cache);
         (dir, service)
