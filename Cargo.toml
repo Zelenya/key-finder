@@ -31,9 +31,10 @@ category = "public.app-category.productivity"
 short_description = "A friendly reminder to use keyboard shortcuts"
 
 [target.'cfg(target_os = "macos")'.dependencies]
+block2 = "0.6"
 mac-notification-sys = "0.6"
 objc2 = "0.6"
-objc2-app-kit = { version = "0.3", features = ["NSAlert", "NSApplication", "NSButton", "NSControl", "NSEvent", "NSGraphics", "NSImage", "NSMenu", "NSMenuItem", "NSOpenPanel", "NSPanel", "NSPathControl", "NSPopUpButton", "NSProgressIndicator", "NSResponder", "NSRunningApplication", "NSSavePanel", "NSScrollView", "NSSplitView", "NSTableColumn", "NSTableView", "NSText", "NSTextField", "NSTextView", "NSToolbar", "NSToolbarItem", "NSUserInterfaceItemIdentification", "NSView", "NSWindow", "NSWorkspace", "block2"] }
+objc2-app-kit = { version = "0.3", features = ["NSAlert", "NSApplication", "NSAttributedString", "NSButton", "NSControl", "NSEvent", "NSFont", "NSGraphics", "NSImage", "NSMenu", "NSMenuItem", "NSOpenPanel", "NSPanel", "NSPathControl", "NSPopUpButton", "NSProgressIndicator", "NSResponder", "NSRunningApplication", "NSSavePanel", "NSScrollView", "NSSplitView", "NSStringDrawing", "NSTableColumn", "NSTableView", "NSText", "NSTextField", "NSTextView", "NSToolbar", "NSToolbarItem", "NSUserInterfaceItemIdentification", "NSView", "NSWindow", "NSWorkspace", "block2"] }
 objc2-foundation = "0.3"
 tray-icon = "0.21"
 

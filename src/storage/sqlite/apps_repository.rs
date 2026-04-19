@@ -38,8 +38,8 @@ impl SqliteAppsRepository {
         self.db.with_transaction("create custom app", |tx| {
             ensure_all_available(tx, &candidates)?;
             tx.execute(
-                "INSERT INTO apps(name, canonical_name)
-                 VALUES (?1, ?2)",
+                "insert into apps(name, canonical_name)
+                 values (?1, ?2)",
                 params![app_name, canonical_name],
             )
             .map_err(|source| AppError::Database {
@@ -50,8 +50,8 @@ impl SqliteAppsRepository {
 
             for (alias, canonical_alias) in alias_rows {
                 tx.execute(
-                    "INSERT INTO app_aliases(app_id, alias, canonical_alias)
-                     VALUES (?1, ?2, ?3)",
+                    "insert into app_aliases(app_id, alias, canonical_alias)
+                     values (?1, ?2, ?3)",
                     params![app_id, alias, canonical_alias],
                 )
                 .map_err(|source| AppError::Database {
@@ -61,6 +61,20 @@ impl SqliteAppsRepository {
             }
 
             Ok(app_id)
+        })
+    }
+
+    /// Delete an app. Aliases, shortcuts, and app_importers cascade via FK;
+    /// imports rows have app_id set to null.
+    pub(crate) fn delete_app(&self, app_id: AppId) -> Result<(), AppError> {
+        self.db.with_connection("delete app", |conn| {
+            conn.execute("delete from apps where id = ?1", params![app_id]).map_err(|source| {
+                AppError::Database {
+                    operation: "delete app".to_string(),
+                    source,
+                }
+            })?;
+            Ok(())
         })
     }
 }

@@ -7,12 +7,13 @@ use objc2::runtime::{AnyObject, Bool};
 use objc2::{define_class, msg_send, DefinedClass, MainThreadMarker, MainThreadOnly};
 use objc2_app_kit::{
     NSAlert, NSAlertFirstButtonReturn, NSAlertSecondButtonReturn, NSApplication,
-    NSControlTextEditingDelegate, NSImage, NSImageNameActionTemplate, NSImageNameAddTemplate, NSTableColumn,
+    NSControlTextEditingDelegate, NSFont, NSFontAttributeName, NSImage, NSStringDrawing, NSTableColumn,
     NSTableView, NSTableViewDataSource, NSTableViewDelegate, NSTextField, NSToolbar, NSToolbarDelegate,
     NSToolbarItem,
 };
 use objc2_foundation::{
-    NSArray, NSInteger, NSNotification, NSObject, NSObjectProtocol, NSPoint, NSRect, NSSize, NSString,
+    NSArray, NSAttributedStringKey, NSDictionary, NSInteger, NSNotification, NSObject, NSObjectProtocol,
+    NSPoint, NSRect, NSSize, NSString,
 };
 use std::cell::{Cell, OnceCell, RefCell};
 
@@ -22,6 +23,7 @@ const COLUMN_STATUS: &str = "status";
 
 const TOOLBAR_NEW_APP: &str = "shortcut-center.new-app";
 const TOOLBAR_IMPORT: &str = "shortcut-center.import";
+const TOOLBAR_DELETE_APP: &str = "shortcut-center.delete-app";
 const TOOLBAR_ADD: &str = "shortcut-center.add";
 
 #[derive(Clone, Debug)]
@@ -138,32 +140,34 @@ define_class!(
             item_identifier: &NSString,
             will_insert: bool,
         ) -> Option<Retained<NSToolbarItem>> {
-            // SAFETY: AppKit exposes these toolbar image-name constants as shared immutable values.
-            let add_image_name = unsafe { NSImageNameAddTemplate };
-            // SAFETY: AppKit exposes these toolbar image-name constants as shared immutable values.
-            let import_image_name = unsafe { NSImageNameActionTemplate };
             match item_identifier.to_string().as_str() {
                 TOOLBAR_NEW_APP => Some((
                     "New App",
                     commands::TAG_NEW_APP_CREATED,
-                    add_image_name,
+                    "📱",
                     "Create a custom app in Shortcuts",
                 )),
                 TOOLBAR_IMPORT => Some((
                     "Import",
                     commands::TAG_IMPORT,
-                    import_image_name,
+                    "📥",
                     "Import shortcuts for the selected app",
+                )),
+                TOOLBAR_DELETE_APP => Some((
+                    "Delete App",
+                    commands::TAG_DELETE_APP,
+                    "🗑️",
+                    "Delete the selected app and all its shortcuts",
                 )),
                 TOOLBAR_ADD => Some((
                     "Add",
                     commands::TAG_ADD,
-                    add_image_name,
+                    "🔑",
                     "Add one shortcut manually",
                 )),
                 _ => None,
             }
-            .map(|(label, tag, image_name, tooltip)| {
+            .map(|(label, tag, emoji, tooltip)| {
                 let item = NSToolbarItem::initWithItemIdentifier(
                     NSToolbarItem::alloc(self.mtm()),
                     item_identifier,
@@ -172,10 +176,9 @@ define_class!(
                 item.setPaletteLabel(&NSString::from_str(label));
                 item.setToolTip(Some(&NSString::from_str(tooltip)));
                 item.setTag(tag as NSInteger);
-                if let Some(image) = NSImage::imageNamed(image_name) {
-                    image.setAccessibilityDescription(Some(&NSString::from_str(label)));
-                    item.setImage(Some(&image));
-                }
+                let image = emoji_image(emoji);
+                image.setAccessibilityDescription(Some(&NSString::from_str(label)));
+                item.setImage(Some(&image));
                 // SAFETY: toolbar items are owned by this window, and the bridge
                 // stays alive as the target-action handler for toolbar commands.
                 unsafe {
@@ -312,4 +315,24 @@ impl ShortcutCenterBridge {
 
         field.stringValue().to_string().trim() != current.trim()
     }
+}
+
+fn emoji_image(emoji: &str) -> Retained<NSImage> {
+    let size = NSSize::new(22.0, 22.0);
+    let emoji = emoji.to_string();
+
+    let handler = block2::RcBlock::new(move |_rect: NSRect| -> Bool {
+        let font = NSFont::systemFontOfSize(18.0);
+        let string = NSString::from_str(&emoji);
+        // SAFETY: NSFontAttributeName is an AppKit-owned static string constant.
+        let font_key: &NSAttributedStringKey = unsafe { NSFontAttributeName };
+        let font_value: &AnyObject = font.as_ref();
+        let attrs: Retained<NSDictionary<NSAttributedStringKey, AnyObject>> =
+            NSDictionary::from_slices(&[font_key], &[font_value]);
+        // SAFETY: invoked from AppKit's drawing handler with a valid graphics context.
+        unsafe { string.drawAtPoint_withAttributes(NSPoint::new(1.0, 1.0), Some(&attrs)) };
+        Bool::YES
+    });
+
+    NSImage::imageWithSize_flipped_drawingHandler(size, false, &handler)
 }

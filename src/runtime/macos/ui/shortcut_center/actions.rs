@@ -2,7 +2,7 @@ use super::commands::ActionCommand;
 use super::dialogs;
 use crate::application::shortcut_center::ShortcutCenterCommandService;
 use crate::domain::errors::AppError;
-use crate::storage::{AppId, ManagedShortcut, ShortcutState};
+use crate::storage::{AppId, AppSummary, ManagedShortcut, ShortcutState};
 use objc2::MainThreadMarker;
 use objc2_app_kit::{NSAlert, NSAlertFirstButtonReturn, NSApplication, NSWindow};
 use objc2_foundation::NSString;
@@ -100,9 +100,28 @@ fn set_selected_state(
 
     let result = command_service.set_shortcut_state(&affected_ids, next_state)?;
     Ok(match result.target_state {
-        ShortcutState::Active => pluralize(result.updated, "Restored", "shortcut"),
-        ShortcutState::Dismissed => pluralize(result.updated, "Hidden", "shortcut"),
+        ShortcutState::Active => format!("Restored {}.", pluralize(result.updated, "shortcut")),
+        ShortcutState::Dismissed => format!("Hidden {}.", pluralize(result.updated, "shortcut")),
     })
+}
+
+pub(super) fn delete_app(
+    command_service: &ShortcutCenterCommandService,
+    app: &AppSummary,
+) -> Result<String, AppError> {
+    let shortcut_count = usize::try_from(app.total_count).unwrap_or(0);
+    let prompt = format!(
+        "Are you sure you want to delete {} with {}?",
+        app.name,
+        pluralize(shortcut_count, "shortcut"),
+    );
+    let confirmed = confirm_action("Delete App", &prompt)?;
+    if !confirmed {
+        return Ok("Canceled.".to_string());
+    }
+
+    command_service.delete_app(app.app_id)?;
+    Ok(format!("Deleted {}.", app.name))
 }
 
 fn delete_selected(
@@ -116,7 +135,7 @@ fn delete_selected(
     let count = selected_shortcuts.len();
     let confirmed = confirm_action(
         "Delete Shortcuts",
-        &format!("{} permanently?", pluralize(count, "Delete", "shortcut")),
+        &format!("Delete {} permanently?", pluralize(count, "shortcut")),
     )?;
 
     if !confirmed {
@@ -125,14 +144,14 @@ fn delete_selected(
 
     let result = command_service
         .delete_shortcuts(&selected_shortcuts.iter().map(|shortcut| shortcut.id).collect::<Vec<_>>())?;
-    Ok(pluralize(result.deleted, "Deleted", "shortcut"))
+    Ok(format!("Deleted {}.", pluralize(result.deleted, "shortcut")))
 }
 
-fn pluralize(count: usize, verb: &str, singular: &str) -> String {
+fn pluralize(count: usize, singular: &str) -> String {
     if count == 1 {
-        format!("{verb} 1 {singular}")
+        format!("1 {singular}")
     } else {
-        format!("{verb} {count} {singular}s")
+        format!("{count} {singular}s")
     }
 }
 

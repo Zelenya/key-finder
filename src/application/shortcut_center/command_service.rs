@@ -82,6 +82,12 @@ impl ShortcutCenterCommandService {
         })
     }
 
+    pub(crate) fn delete_app(&self, app_id: AppId) -> Result<(), AppError> {
+        self.apps_repo.delete_app(app_id)?;
+        self.refresh_snapshot()?;
+        Ok(())
+    }
+
     pub(crate) fn add_shortcut(
         &self,
         app_id: AppId,

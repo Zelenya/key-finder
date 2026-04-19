@@ -8,6 +8,7 @@ use objc2_foundation::{NSArray, NSString};
 
 const TOOLBAR_NEW_APP: &str = "shortcut-center.new-app";
 const TOOLBAR_IMPORT: &str = "shortcut-center.import";
+const TOOLBAR_DELETE_APP: &str = "shortcut-center.delete-app";
 const TOOLBAR_ADD: &str = "shortcut-center.add";
 
 pub(crate) fn build_toolbar(mtm: MainThreadMarker, bridge: &ShortcutCenterBridge) -> Retained<NSToolbar> {
@@ -25,6 +26,7 @@ pub(crate) fn toolbar_identifiers() -> Retained<NSArray<NSString>> {
     NSArray::from_retained_slice(&[
         NSString::from_str(TOOLBAR_NEW_APP),
         NSString::from_str(TOOLBAR_IMPORT),
+        NSString::from_str(TOOLBAR_DELETE_APP),
         NSString::from_str(TOOLBAR_ADD),
     ])
 }

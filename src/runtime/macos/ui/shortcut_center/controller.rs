@@ -308,6 +308,13 @@ fn handle_intent(
             ImportTarget::from_app(runtime.app),
             &ui.window,
         ),
+        UiIntent::DeleteSelectedApp => {
+            let status = actions::delete_app(runtime.command_service, runtime.app)?;
+            selection.selected_ids.clear();
+            selection.focused_id = None;
+            *pending_app_id = None;
+            Ok(status)
+        }
         UiIntent::NewAppCreated => match dialogs::open_new_app_dialog(runtime.command_service, &ui.window) {
             Ok(dialogs::NewAppDialogResult::Created {
                 app_id,

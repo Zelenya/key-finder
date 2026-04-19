@@ -14,6 +14,7 @@ pub(super) enum UiIntent {
     FilterChanged,
     ImportSelectedApp,
     NewAppCreated,
+    DeleteSelectedApp,
     TableSelectionChanged,
     Command(ActionCommand),
 }
@@ -26,6 +27,7 @@ pub(super) const TAG_NEW_APP_CREATED: i64 = 13;
 pub(super) const TAG_TABLE_SELECTION_CHANGED: i64 = 14;
 
 pub(super) const TAG_IMPORT: i64 = 101;
+pub(super) const TAG_DELETE_APP: i64 = 102;
 pub(super) const TAG_ADD: i64 = 200;
 pub(super) const TAG_SAVE_DESCRIPTION: i64 = 201;
 pub(super) const TAG_TOGGLE_VISIBILITY_SELECTED: i64 = 202;
@@ -38,6 +40,7 @@ pub(super) fn decode_intent(tag: Option<i64>) -> UiIntent {
         TAG_FILTER_CHANGED => UiIntent::FilterChanged,
         TAG_IMPORT => UiIntent::ImportSelectedApp,
         TAG_NEW_APP_CREATED => UiIntent::NewAppCreated,
+        TAG_DELETE_APP => UiIntent::DeleteSelectedApp,
         TAG_TABLE_SELECTION_CHANGED => UiIntent::TableSelectionChanged,
         TAG_ADD => UiIntent::Command(ActionCommand::AddShortcut),
         TAG_SAVE_DESCRIPTION => UiIntent::Command(ActionCommand::SaveDescription),
