@@ -13,6 +13,7 @@ pub struct AppConfig {
     pub is_bundled: bool,
     // TODO: Should this be taken out, non-bundled specific?
     pub terminal_notifier_path: Option<String>,
-    pub interval: Duration,
+    pub cooldown: Duration,
+    pub app_switch_bounce: Duration,
     pub database_path: PathBuf,
 }

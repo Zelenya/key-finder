@@ -1,4 +1,6 @@
-use crate::application::runtime_settings::{resolve_notify_interval, resolve_terminal_notifier_path};
+use crate::application::runtime_settings::{
+    resolve_app_switch_bounce, resolve_cooldown, resolve_terminal_notifier_path,
+};
 use crate::domain::errors::AppError;
 use crate::domain::models::AppConfig;
 use crate::storage::SqliteDb;
@@ -20,7 +22,10 @@ pub struct Cli {
     pub terminal_notifier_path: Option<String>,
 
     #[arg(long)]
-    pub notify_interval: Option<String>,
+    pub cooldown: Option<String>,
+
+    #[arg(long)]
+    pub app_switch_bounce: Option<String>,
 
     #[arg(long)]
     pub database_path: Option<PathBuf>,
@@ -33,17 +38,23 @@ impl Cli {
         let settings_repo = db.settings_repository();
         let db_settings = settings_repo.load_app_settings()?;
         let env_terminal_notifier_path = env::var("TERMINAL_NOTIFIER_PATH").ok();
-        let env_notify_interval = env::var("NOTIFY_INTERVAL").ok();
+        let env_cooldown = env::var("COOLDOWN").ok();
+        let env_app_switch_bounce = env::var("APP_SWITCH_BOUNCE").ok();
 
         let terminal_notifier_path = resolve_terminal_notifier_path(
             self.terminal_notifier_path.as_deref(),
             env_terminal_notifier_path.as_deref(),
             db_settings.terminal_notifier_path.as_deref(),
         );
-        let interval = resolve_notify_interval(
-            self.notify_interval.as_deref(),
-            env_notify_interval.as_deref(),
-            db_settings.notify_interval.as_deref(),
+        let cooldown = resolve_cooldown(
+            self.cooldown.as_deref(),
+            env_cooldown.as_deref(),
+            db_settings.cooldown.as_deref(),
+        )?;
+        let app_switch_bounce = resolve_app_switch_bounce(
+            self.app_switch_bounce.as_deref(),
+            env_app_switch_bounce.as_deref(),
+            db_settings.app_switch_bounce.as_deref(),
         )?;
 
         let is_bundled = detect_bundled_app();
@@ -51,7 +62,8 @@ impl Cli {
         Ok(AppConfig {
             is_bundled,
             terminal_notifier_path,
-            interval,
+            cooldown,
+            app_switch_bounce,
             database_path,
         })
     }

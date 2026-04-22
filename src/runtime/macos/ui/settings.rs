@@ -1,5 +1,6 @@
+use crate::application::notification_types::SchedulerCommand;
 use crate::application::notifications::WorkerCommand;
-use crate::application::runtime_settings::{self, parse_notify_interval};
+use crate::application::runtime_settings::{self, parse_duration_setting};
 use crate::domain::errors::AppError;
 use crate::domain::models::AppConfig;
 use crate::runtime::macos::ui::modal::{add_modal_action_button, show_modal_error};
@@ -23,7 +24,8 @@ pub(crate) enum SettingsDialogResult {
 
 struct SettingsWindowUi {
     window: Retained<NSWindow>,
-    notify_interval_field: Retained<NSTextField>,
+    cooldown_field: Retained<NSTextField>,
+    app_switch_bounce_field: Retained<NSTextField>,
     terminal_notifier_field: Retained<NSTextField>,
 }
 
@@ -42,10 +44,7 @@ fn open_settings_dialog(
     repo: &SqliteSettingsRepository,
     worker_tx: &mpsc::Sender<WorkerCommand>,
 ) -> Result<SettingsDialogResult, AppError> {
-    let current = AppSettings {
-        notify_interval: Some(format_duration(config.interval).to_string()),
-        terminal_notifier_path: config.terminal_notifier_path.clone(),
-    };
+    let current = current_runtime_settings(config);
 
     let Some(mtm) = MainThreadMarker::new() else {
         return Err(AppError::MainThreadRequired);
@@ -67,7 +66,8 @@ fn open_settings_dialog(
         }
         if response == objc2_app_kit::NSModalResponseStop {
             let edited = AppSettings {
-                notify_interval: read_optional_text_field(&ui.notify_interval_field),
+                cooldown: read_optional_text_field(&ui.cooldown_field),
+                app_switch_bounce: read_optional_text_field(&ui.app_switch_bounce_field),
                 terminal_notifier_path: read_optional_text_field(&ui.terminal_notifier_field),
             };
 
@@ -85,6 +85,14 @@ fn open_settings_dialog(
     }
 }
 
+fn current_runtime_settings(config: &AppConfig) -> AppSettings {
+    AppSettings {
+        cooldown: Some(format_duration(config.cooldown).to_string()),
+        app_switch_bounce: Some(format_duration(config.app_switch_bounce).to_string()),
+        terminal_notifier_path: config.terminal_notifier_path.clone(),
+    }
+}
+
 fn save_settings(
     repo: &SqliteSettingsRepository,
     worker_tx: &mpsc::Sender<WorkerCommand>,
@@ -98,8 +106,11 @@ fn save_settings(
 }
 
 fn validate_runtime_settings(settings: &AppSettings) -> Result<(), AppError> {
-    if let Some(interval) = settings.notify_interval.as_deref() {
-        parse_notify_interval(interval)?;
+    if let Some(cooldown) = settings.cooldown.as_deref() {
+        parse_duration_setting("cooldown", cooldown)?;
+    }
+    if let Some(app_switch_bounce) = settings.app_switch_bounce.as_deref() {
+        parse_duration_setting("app switch bounce", app_switch_bounce)?;
     }
     Ok(())
 }
@@ -108,25 +119,41 @@ fn apply_runtime_worker_overrides(
     worker_tx: &mpsc::Sender<WorkerCommand>,
     settings: &AppSettings,
 ) -> Result<(), AppError> {
-    let env_notify_interval = std::env::var("NOTIFY_INTERVAL").ok();
+    let env_cooldown = std::env::var("COOLDOWN").ok();
+    let env_app_switch_bounce = std::env::var("APP_SWITCH_BOUNCE").ok();
     worker_tx
-        .send(WorkerCommand::SetInterval(resolve_runtime_notify_interval(
-            settings,
-            env_notify_interval.as_deref(),
-        )?))
-        .map_err(|e| AppError::UiOperation(format!("failed to send interval update: {e}")))?;
+        .send(WorkerCommand::Update(SchedulerCommand::Cooldown(
+            resolve_runtime_cooldown(settings, env_cooldown.as_deref())?,
+        )))
+        .map_err(|e| AppError::UiOperation(format!("failed to send cooldown update: {e}")))?;
+    worker_tx
+        .send(WorkerCommand::Update(SchedulerCommand::AppSwitchBounce(
+            resolve_runtime_app_switch_bounce(settings, env_app_switch_bounce.as_deref())?,
+        )))
+        .map_err(|e| AppError::UiOperation(format!("failed to send app switch bounce update: {e}")))?;
     Ok(())
 }
 
-fn resolve_runtime_notify_interval(
+fn resolve_runtime_cooldown(
     settings: &AppSettings,
-    env_notify_interval: Option<&str>,
+    env_cooldown: Option<&str>,
 ) -> Result<Duration, AppError> {
-    runtime_settings::resolve_notify_interval(None, env_notify_interval, settings.notify_interval.as_deref())
+    runtime_settings::resolve_cooldown(None, env_cooldown, settings.cooldown.as_deref())
+}
+
+fn resolve_runtime_app_switch_bounce(
+    settings: &AppSettings,
+    env_app_switch_bounce: Option<&str>,
+) -> Result<Duration, AppError> {
+    runtime_settings::resolve_app_switch_bounce(
+        None,
+        env_app_switch_bounce,
+        settings.app_switch_bounce.as_deref(),
+    )
 }
 
 const WINDOW_WIDTH: f64 = 680.0;
-const WINDOW_HEIGHT: f64 = 220.0;
+const WINDOW_HEIGHT: f64 = 300.0;
 const CONTENT_LEFT: f64 = 20.0;
 const CONTENT_WIDTH: f64 = 640.0;
 const ACTION_BUTTON_WIDTH: f64 = 90.0;
@@ -169,12 +196,19 @@ fn build_settings_window(
         .contentView()
         .ok_or_else(|| AppError::UiOperation("missing settings window content view".to_string()))?;
 
-    let notify_interval_field = add_labeled_text_field(
+    let cooldown_field = add_labeled_text_field(
         &content,
         mtm,
-        "Notification interval (applies immediately; examples: 45s, 10m, 1h)",
+        "Choose the duration between showing shortcuts (examples: 45s, 10m, 1h)",
+        200.0,
+        settings.cooldown.as_deref().unwrap_or(""),
+    );
+    let app_switch_bounce_field = add_labeled_text_field(
+        &content,
+        mtm,
+        "You need to stay in the app for this duration before shortcuts for it can appear (examples: 30s, 1m)",
         140.0,
-        settings.notify_interval.as_deref().unwrap_or(""),
+        settings.app_switch_bounce.as_deref().unwrap_or(""),
     );
     let terminal_notifier_field = add_labeled_text_field(
         &content,
@@ -209,7 +243,8 @@ fn build_settings_window(
 
     Ok(SettingsWindowUi {
         window,
-        notify_interval_field,
+        cooldown_field,
+        app_switch_bounce_field,
         terminal_notifier_field,
     })
 }
@@ -256,46 +291,77 @@ fn read_optional_text_field(field: &NSTextField) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::resolve_runtime_notify_interval;
+    use super::{resolve_runtime_app_switch_bounce, resolve_runtime_cooldown};
     use crate::storage::AppSettings;
     use std::time::Duration;
 
     #[test]
-    fn live_interval_uses_env_when_db_setting_is_cleared() {
+    fn live_cooldown_uses_env_when_db_setting_is_cleared() {
         let settings = AppSettings {
-            notify_interval: None,
+            cooldown: None,
+            app_switch_bounce: None,
             terminal_notifier_path: None,
         };
 
         assert_eq!(
-            resolve_runtime_notify_interval(&settings, Some("45s")).expect("interval"),
+            resolve_runtime_cooldown(&settings, Some("45s")).expect("cooldown"),
             Duration::from_secs(45)
         );
     }
 
     #[test]
-    fn live_interval_matches_startup_precedence_when_env_and_db_are_both_present() {
+    fn live_cooldown_matches_startup_precedence_when_env_and_db_are_both_present() {
         let settings = AppSettings {
-            notify_interval: Some("10m".to_string()),
+            cooldown: Some("10m".to_string()),
+            app_switch_bounce: None,
             terminal_notifier_path: None,
         };
 
         assert_eq!(
-            resolve_runtime_notify_interval(&settings, Some("45s")).expect("interval"),
+            resolve_runtime_cooldown(&settings, Some("45s")).expect("cooldown"),
             Duration::from_secs(45)
         );
     }
 
     #[test]
-    fn live_interval_uses_db_when_env_is_missing() {
+    fn live_cooldown_uses_db_when_env_is_missing() {
         let settings = AppSettings {
-            notify_interval: Some("10m".to_string()),
+            cooldown: Some("10m".to_string()),
+            app_switch_bounce: None,
             terminal_notifier_path: None,
         };
 
         assert_eq!(
-            resolve_runtime_notify_interval(&settings, None).expect("interval"),
+            resolve_runtime_cooldown(&settings, None).expect("cooldown"),
             Duration::from_secs(10 * 60)
+        );
+    }
+
+    #[test]
+    fn live_app_switch_bounce_uses_env_when_db_setting_is_cleared() {
+        let settings = AppSettings {
+            cooldown: None,
+            app_switch_bounce: None,
+            terminal_notifier_path: None,
+        };
+
+        assert_eq!(
+            resolve_runtime_app_switch_bounce(&settings, Some("15s")).expect("bounce"),
+            Duration::from_secs(15)
+        );
+    }
+
+    #[test]
+    fn live_app_switch_bounce_uses_db_when_env_is_missing() {
+        let settings = AppSettings {
+            cooldown: None,
+            app_switch_bounce: Some("30s".to_string()),
+            terminal_notifier_path: None,
+        };
+
+        assert_eq!(
+            resolve_runtime_app_switch_bounce(&settings, None).expect("bounce"),
+            Duration::from_secs(30)
         );
     }
 }

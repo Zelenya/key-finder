@@ -1,42 +1,41 @@
+use crate::application::notification_scheduler::Scheduler;
+use crate::application::notification_scheduler::SchedulerConfig;
+use crate::application::notification_types::SchedulerCommand;
 use crate::application::shortcut_center::ShortcutCache;
 use crate::domain::errors::AppError;
 use crate::notifications::notification_payload;
 use crate::notifications::notifier::Notifier;
-use crate::notifications::SelectedApp;
-use crate::storage::AppId;
 use std::sync::mpsc;
 use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
+use std::time::Instant;
 
 #[derive(Debug)]
 pub(crate) enum WorkerCommand {
     Stop,
-    SetPaused(bool),
-    SetInterval(Duration),
-    SetFocus(AppFocusState),
+    Update(SchedulerCommand),
 }
 
 pub(crate) struct NotificationService {
     worker: thread::JoinHandle<()>,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum AppFocusState {
-    FollowCurrentApp,
-    FocusOn(AppId),
-}
-
 type CurrentAppProvider = Arc<dyn Fn() -> Option<String> + Send + Sync>;
 
 pub(crate) fn start_notification_service(
-    interval: Duration,
+    cooldown: Duration,
+    app_switch_bounce: Duration,
     shortcuts: ShortcutCache,
     notifier: Arc<dyn Notifier>,
     current_app_provider: CurrentAppProvider,
 ) -> (mpsc::Sender<WorkerCommand>, NotificationService) {
     let (command_tx, command_rx) = mpsc::channel::<WorkerCommand>();
-    let worker = spawn_notification_worker(interval, command_rx, shortcuts, notifier, current_app_provider);
+    let config = SchedulerConfig {
+        cooldown,
+        app_switch_bounce,
+    };
+    let worker = spawn_notification_worker(config, command_rx, shortcuts, notifier, current_app_provider);
     (command_tx, NotificationService { worker })
 }
 
@@ -47,48 +46,41 @@ impl NotificationService {
 }
 
 fn spawn_notification_worker(
-    interval: Duration,
+    config: SchedulerConfig,
     command_rx: mpsc::Receiver<WorkerCommand>,
     shortcuts: ShortcutCache,
     notifier: Arc<dyn Notifier>,
     current_app_provider: CurrentAppProvider,
 ) -> thread::JoinHandle<()> {
     thread::spawn(move || {
-        let mut interval = interval;
-        let mut paused = false;
-        let mut focus_state = AppFocusState::FollowCurrentApp;
+        let mut scheduler = Scheduler::new(config);
 
         loop {
-            if !paused {
-                let current_shortcuts = shortcuts.snapshot();
-                let selected_app = select_app(focus_state, &current_app_provider);
-                let content = notification_payload(&current_shortcuts, selected_app);
-                if let Err(err) = notifier.notify(&content) {
-                    eprintln!("{err}");
+            if scheduler.is_paused() {
+                match command_rx.recv() {
+                    Ok(WorkerCommand::Stop) => break,
+                    Ok(WorkerCommand::Update(cmd)) => scheduler.on_command(cmd, Instant::now()),
+                    Err(_) => break,
                 }
-            }
-
-            match command_rx.recv_timeout(interval) {
-                Ok(WorkerCommand::Stop) => break,
-                Ok(WorkerCommand::SetPaused(value)) => paused = value,
-                Ok(WorkerCommand::SetInterval(value)) => interval = value,
-                Ok(WorkerCommand::SetFocus(value)) => focus_state = value,
-                Err(mpsc::RecvTimeoutError::Timeout) => {}
-                Err(mpsc::RecvTimeoutError::Disconnected) => break,
+            } else {
+                let timeout = scheduler.deadline.saturating_duration_since(Instant::now());
+                match command_rx.recv_timeout(timeout) {
+                    Ok(WorkerCommand::Stop) => break,
+                    Ok(WorkerCommand::Update(cmd)) => scheduler.on_command(cmd, Instant::now()),
+                    Err(mpsc::RecvTimeoutError::Disconnected) => break,
+                    Err(mpsc::RecvTimeoutError::Timeout) => {
+                        let now = Instant::now();
+                        let frontmost_app = current_app_provider();
+                        if let Some(app) = scheduler.on_wake(frontmost_app, now) {
+                            let current_shortcuts = shortcuts.snapshot();
+                            let content = notification_payload(&current_shortcuts, app);
+                            if let Err(err) = notifier.notify(&content) {
+                                eprintln!("{err}");
+                            }
+                        }
+                    }
+                }
             }
         }
     })
-}
-
-fn select_app(focus_state: AppFocusState, current_app_provider: &CurrentAppProvider) -> SelectedApp {
-    match focus_state {
-        AppFocusState::FocusOn(app_id) => SelectedApp::FocusedId(app_id),
-        AppFocusState::FollowCurrentApp => {
-            if let Some(app_name) = current_app_provider() {
-                SelectedApp::GuestimatedName(app_name)
-            } else {
-                SelectedApp::Unknown
-            }
-        }
-    }
 }

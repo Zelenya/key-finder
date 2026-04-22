@@ -1,28 +1,22 @@
 pub mod notifier;
 
+use crate::application::notification_types::ChosenApp;
 use crate::domain::models::NotificationContent;
-use crate::storage::{AppId, NotificationSnapshot};
+use crate::storage::NotificationSnapshot;
 use rand::prelude::*;
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum SelectedApp {
-    FocusedId(AppId),
-    GuestimatedName(String),
-    Unknown,
-}
 
 pub(crate) fn notification_payload(
     snapshot: &NotificationSnapshot,
-    current_app: SelectedApp,
+    current_app: ChosenApp,
 ) -> NotificationContent {
     let mut rng = rand::rng();
 
     let entry = match &current_app {
-        SelectedApp::Unknown => snapshot.shortcuts.iter().choose(&mut rng),
-        SelectedApp::FocusedId(id) => snapshot.shortcuts_for_app(*id).choose(&mut rng),
-        SelectedApp::GuestimatedName(name) => match snapshot.resolve_guessed_app(name) {
+        ChosenApp::RandomShortcut => snapshot.shortcuts.iter().choose(&mut rng),
+        ChosenApp::FocusedId(id) => snapshot.shortcuts_for_app(*id).choose(&mut rng),
+        ChosenApp::GuestimatedName(name) => match snapshot.resolve_guessed_app(name) {
             Some(app_id) => snapshot.shortcuts_for_app(app_id).choose(&mut rng),
-            None => snapshot.shortcuts.iter().choose(&mut rng),
+            None => None,
         },
     };
 
@@ -34,9 +28,9 @@ pub(crate) fn notification_payload(
         }
     } else {
         let empty_state_name = match &current_app {
-            SelectedApp::FocusedId(app_id) => snapshot.app_name(*app_id),
-            SelectedApp::GuestimatedName(name) => name.as_str(),
-            SelectedApp::Unknown => "unknown app",
+            ChosenApp::FocusedId(app_id) => snapshot.app_name(*app_id),
+            ChosenApp::GuestimatedName(name) => name.as_str(),
+            ChosenApp::RandomShortcut => "anything",
         };
 
         NotificationContent {
@@ -49,7 +43,7 @@ pub(crate) fn notification_payload(
 
 #[cfg(test)]
 mod tests {
-    use super::{notification_payload, SelectedApp};
+    use super::{notification_payload, ChosenApp};
     use crate::storage::{NotificationApp, NotificationShortcut, NotificationSnapshot};
 
     fn snapshot(apps: Vec<NotificationApp>, shortcuts: Vec<NotificationShortcut>) -> NotificationSnapshot {
@@ -87,7 +81,7 @@ mod tests {
 
         let payload = notification_payload(
             &snapshot,
-            SelectedApp::GuestimatedName("Visual Studio Code".to_string()),
+            ChosenApp::GuestimatedName("Visual Studio Code".to_string()),
         );
         assert!(payload.title.contains("Code"));
     }
@@ -107,7 +101,7 @@ mod tests {
             }],
         );
 
-        let payload = notification_payload(&snapshot, SelectedApp::GuestimatedName("Foo".to_string()));
+        let payload = notification_payload(&snapshot, ChosenApp::GuestimatedName("Foo".to_string()));
         assert!(payload.title.contains("Foo Studio"));
     }
 
@@ -126,8 +120,9 @@ mod tests {
             }],
         );
 
-        let payload = notification_payload(&snapshot, SelectedApp::GuestimatedName("Safari".to_string()));
-        assert!(payload.title.contains("Foo Studio"));
+        let payload = notification_payload(&snapshot, ChosenApp::GuestimatedName("Safari".to_string()));
+        assert_eq!(payload.title, "No shortcuts found for Safari");
+        assert!(payload.subtitle.is_none());
     }
 
     #[test]
@@ -145,7 +140,7 @@ mod tests {
             }],
         );
 
-        let payload = notification_payload(&snapshot, SelectedApp::Unknown);
+        let payload = notification_payload(&snapshot, ChosenApp::RandomShortcut);
         assert!(payload.title.contains("Foo Studio"));
     }
 
@@ -171,7 +166,7 @@ mod tests {
             }],
         );
 
-        let payload = notification_payload(&snapshot, SelectedApp::FocusedId(1.into()));
+        let payload = notification_payload(&snapshot, ChosenApp::FocusedId(1.into()));
         assert_eq!(payload.title, "No shortcuts found for Empty App");
         assert!(payload.subtitle.is_none());
     }

@@ -107,7 +107,8 @@ impl NotificationSnapshot {
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub(crate) struct AppSettings {
-    pub notify_interval: Option<String>,
+    pub cooldown: Option<String>,
+    pub app_switch_bounce: Option<String>,
     pub terminal_notifier_path: Option<String>,
 }
 

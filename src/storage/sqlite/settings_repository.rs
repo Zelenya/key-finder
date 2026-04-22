@@ -61,23 +61,26 @@ impl SqliteSettingsRepository {
 
 #[derive(Clone, Copy, Debug)]
 enum SettingKey {
-    NotifyInterval,
+    Cooldown,
+    AppSwitchBounce,
     TerminalNotifierPath,
 }
 
 impl SettingKey {
-    const ALL: [Self; 2] = [Self::NotifyInterval, Self::TerminalNotifierPath];
+    const ALL: [Self; 3] = [Self::Cooldown, Self::AppSwitchBounce, Self::TerminalNotifierPath];
 
     fn as_str(self) -> &'static str {
         match self {
-            Self::NotifyInterval => "notify_interval",
+            Self::Cooldown => "cooldown",
+            Self::AppSwitchBounce => "app_switch_bounce",
             Self::TerminalNotifierPath => "terminal_notifier_path",
         }
     }
 
     fn parse(key: &str) -> Option<Self> {
         match key {
-            "notify_interval" => Some(Self::NotifyInterval),
+            "cooldown" => Some(Self::Cooldown),
+            "app_switch_bounce" => Some(Self::AppSwitchBounce),
             "terminal_notifier_path" => Some(Self::TerminalNotifierPath),
             _ => None,
         }
@@ -85,14 +88,16 @@ impl SettingKey {
 
     fn read(self, settings: &AppSettings) -> Option<&str> {
         match self {
-            Self::NotifyInterval => settings.notify_interval.as_deref(),
+            Self::Cooldown => settings.cooldown.as_deref(),
+            Self::AppSwitchBounce => settings.app_switch_bounce.as_deref(),
             Self::TerminalNotifierPath => settings.terminal_notifier_path.as_deref(),
         }
     }
 
     fn write(self, settings: &mut AppSettings, value: String) {
         match self {
-            Self::NotifyInterval => settings.notify_interval = Some(value),
+            Self::Cooldown => settings.cooldown = Some(value),
+            Self::AppSwitchBounce => settings.app_switch_bounce = Some(value),
             Self::TerminalNotifierPath => settings.terminal_notifier_path = Some(value),
         }
     }
@@ -138,13 +143,15 @@ mod tests {
 
         settings_repo
             .save_app_settings(&crate::storage::AppSettings {
-                notify_interval: Some("30m".to_string()),
+                cooldown: Some("30m".to_string()),
+                app_switch_bounce: Some("45s".to_string()),
                 terminal_notifier_path: Some("/opt/homebrew/bin/terminal-notifier".to_string()),
             })
             .expect("save settings");
 
         let settings = settings_repo.load_app_settings().expect("load settings");
-        assert_eq!(settings.notify_interval.as_deref(), Some("30m"));
+        assert_eq!(settings.cooldown.as_deref(), Some("30m"));
+        assert_eq!(settings.app_switch_bounce.as_deref(), Some("45s"));
         assert_eq!(
             settings.terminal_notifier_path.as_deref(),
             Some("/opt/homebrew/bin/terminal-notifier")

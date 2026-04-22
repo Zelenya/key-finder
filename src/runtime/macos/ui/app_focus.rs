@@ -8,9 +8,10 @@ use objc2_app_kit::{
 };
 use objc2_foundation::{NSPoint, NSRect, NSSize, NSString};
 
+use crate::application::notification_types::{AppFocusState, SchedulerCommand};
 use crate::storage::{AppSummary, SqliteShortcutCatalogRepository};
 use crate::{
-    application::notifications::{AppFocusState, WorkerCommand},
+    application::notifications::WorkerCommand,
     domain::{errors::AppError, models::AppConfig},
     runtime::macos::ui::modal::{add_modal_action_button, populate_popup, show_modal_error},
     storage::SqliteDb,
@@ -79,7 +80,7 @@ fn open_focus_app_dialog(
 
 fn focus_on_app(worker_tx: &mpsc::Sender<WorkerCommand>, focus_state: AppFocusState) -> Result<(), AppError> {
     worker_tx
-        .send(WorkerCommand::SetFocus(focus_state))
+        .send(WorkerCommand::Update(SchedulerCommand::Focus(focus_state)))
         .map_err(|e| AppError::UiOperation(format!("failed to send app focus update: {e}")))
 }
 
