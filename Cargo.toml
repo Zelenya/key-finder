@@ -39,4 +39,5 @@ objc2-foundation = "0.3"
 tray-icon = "0.21"
 
 [dev-dependencies]
+proptest = "1"
 tempfile = "3.14"

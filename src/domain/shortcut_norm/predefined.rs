@@ -112,21 +112,23 @@ fn comma_starts_next_chord(chars: &std::iter::Peekable<std::str::Chars<'_>>) -> 
         lookahead.next();
     }
 
-    match lookahead.peek().copied() {
-        Some(ch) if symbol_token(ch).is_some() => true,
-        Some(_) => {
-            let mut word = String::new();
-            while let Some(ch) = lookahead.peek().copied() {
-                if ch == ',' || ch == '+' || ch.is_whitespace() || symbol_token(ch).is_some() {
-                    break;
-                }
-                word.push(ch);
-                lookahead.next();
-            }
-            matches!(named_token(&word.to_ascii_lowercase()), Some(Token::Modifier(_)))
-        }
-        None => false,
+    let Some(ch) = lookahead.peek().copied() else {
+        return false;
+    };
+
+    if let Some(token) = symbol_token(ch) {
+        return matches!(token, Token::Modifier(_));
     }
+
+    let mut word = String::new();
+    while let Some(ch) = lookahead.peek().copied() {
+        if ch == ',' || ch == '+' || ch.is_whitespace() || symbol_token(ch).is_some() {
+            break;
+        }
+        word.push(ch);
+        lookahead.next();
+    }
+    matches!(named_token(&word.to_ascii_lowercase()), Some(Token::Modifier(_)))
 }
 
 fn split_segments(raw: &str, delimiter: ShortcutDelimiter) -> Vec<&str> {
@@ -144,6 +146,8 @@ fn split_segments(raw: &str, delimiter: ShortcutDelimiter) -> Vec<&str> {
 mod tests {
     use super::{canonical_shortcut_from_delimited_input, normalize_shortcut, ShortcutDelimiter};
     use crate::domain::shortcut_norm::parse::canonical_shortcut_from_chords;
+    use crate::domain::shortcut_norm::render_canonical_shortcut;
+    use proptest::prelude::*;
 
     #[test]
     fn normalizes_symbols_and_names() {
@@ -282,5 +286,73 @@ mod tests {
             ),
             "cmd+right"
         );
+    }
+
+    proptest! {
+        #[test]
+        fn normalize_shortcut_is_idempotent(raw in any::<String>()) {
+            let once = normalize_shortcut(&raw);
+            let twice = normalize_shortcut(&once);
+            prop_assert_eq!(once, twice);
+        }
+
+        #[test]
+        fn canonical_shortcut_round_trips_through_render(canonical in arb_canonical_shortcut()) {
+            let rendered = render_canonical_shortcut(&canonical);
+            prop_assert_eq!(normalize_shortcut(&rendered), canonical);
+        }
+    }
+
+    // Note: Each chord carries at least one modifier — a bare `comma` chord renders to ", "
+    // which is indistinguishable from a chord break, and that ambiguity is real,
+    // not a behavior the property should worry about.
+    fn arb_canonical_shortcut() -> impl Strategy<Value = String> {
+        proptest::collection::vec(arb_canonical_chord(), 1..=3).prop_map(|chords| chords.join(","))
+    }
+
+    fn arb_canonical_chord() -> impl Strategy<Value = String> {
+        (arb_modifiers(), arb_canonical_key()).prop_map(|(mods, key)| {
+            // This won't happen with the current arb_modifiers, but just in case
+            if mods.is_empty() {
+                key
+            } else {
+                format!("{}+{}", mods.join("+"), key)
+            }
+        })
+    }
+
+    fn arb_modifiers() -> impl Strategy<Value = Vec<&'static str>> {
+        proptest::sample::subsequence(vec!["cmd", "ctrl", "alt", "shift"], 1..=4)
+    }
+
+    fn arb_canonical_key() -> impl Strategy<Value = String> {
+        static KEYS: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
+        let keys = KEYS.get_or_init(|| {
+            let letters = (b'a'..=b'z').map(|c| (c as char).to_string());
+            let keywords = [
+                "left",
+                "right",
+                "up",
+                "down",
+                "enter",
+                "escape",
+                "space",
+                "comma",
+                "period",
+                "slash",
+                "minus",
+                "equal",
+                "semicolon",
+                "quote",
+                "backtick",
+                "left_bracket",
+                "right_bracket",
+                "backslash",
+            ]
+            .into_iter()
+            .map(String::from);
+            letters.chain(keywords).collect()
+        });
+        proptest::sample::select(keys.clone())
     }
 }

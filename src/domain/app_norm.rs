@@ -13,7 +13,8 @@ pub(crate) fn normalize_app_name(name: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{app_matches_any, app_names_match};
+    use super::{app_matches_any, app_names_match, normalize_app_name};
+    use proptest::prelude::*;
 
     #[test]
     fn matches_expected_names() {
@@ -47,5 +48,23 @@ mod tests {
         assert!(app_matches_any(&names, "Acme"));
         assert!(app_matches_any(&names, "Acme Studio"));
         assert!(!app_matches_any(&names, "Safari"));
+    }
+
+    proptest! {
+        #[test]
+        fn normalize_app_name_is_ascii_lowercase_alphanumeric(name in any::<String>()) {
+            let normalized = normalize_app_name(&name);
+            prop_assert!(
+                normalized.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit()),
+                "normalized output {normalized:?} contains non-ascii-lowercase-alphanumeric chars"
+            );
+        }
+
+        #[test]
+        fn normalize_app_name_is_idempotent(name in any::<String>()) {
+            let once = normalize_app_name(&name);
+            let twice = normalize_app_name(&once);
+            prop_assert_eq!(once, twice);
+        }
     }
 }

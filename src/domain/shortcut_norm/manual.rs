@@ -173,6 +173,7 @@ fn manual_named_token(normalized: &str) -> Option<Token> {
 #[cfg(test)]
 mod tests {
     use super::normalize_manual_shortcut;
+    use proptest::prelude::*;
 
     #[test]
     fn normalizes_manual_punctuation_shortcuts() {
@@ -193,5 +194,14 @@ mod tests {
         assert_eq!(normalize_manual_shortcut("⌘ K, ⌘ R"), "cmd+k,cmd+r");
         assert_eq!(normalize_manual_shortcut("cmd+k cmd+s"), "cmd+k,cmd+s");
         assert_eq!(normalize_manual_shortcut("⌘⇧P"), "cmd+shift+p");
+    }
+
+    proptest! {
+        #[test]
+        fn normalize_manual_shortcut_is_idempotent(raw in any::<String>()) {
+            let once = normalize_manual_shortcut(&raw);
+            let twice = normalize_manual_shortcut(&once);
+            prop_assert_eq!(once, twice);
+        }
     }
 }
