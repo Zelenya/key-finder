@@ -6,6 +6,14 @@ pub enum AppError {
     #[error("configuration error: {0}")]
     Config(String),
 
+    #[error("invalid {setting} '{value}': {source}")]
+    InvalidDurationSetting {
+        setting: String,
+        value: String,
+        #[source]
+        source: humantime::DurationError,
+    },
+
     #[error(
         "unsupported platform: this app currently supports macOS only. \
 to extend support, add a target-specific notifier backend in src/core/notifier.rs"
@@ -30,6 +38,21 @@ to extend support, add a target-specific notifier backend in src/core/notifier.r
     #[error("storage operation failed: {0}")]
     StorageOperation(String),
 
+    #[error("app name cannot be empty")]
+    AppNameEmpty,
+
+    #[error("app name must contain at least one letter or number")]
+    AppNameInvalid,
+
+    #[error("name '{name}' conflicts with existing app '{existing_app}'")]
+    AppNameConflict { name: String, existing_app: String },
+
+    #[error("shortcut cannot be empty")]
+    ShortcutEmpty,
+
+    #[error("description cannot be empty")]
+    ShortcutDescriptionEmpty,
+
     #[error("ui operation failed: {0}")]
     UiOperation(String),
 
@@ -49,8 +72,9 @@ to extend support, add a target-specific notifier backend in src/core/notifier.r
     #[error("invalid importer source in '{path}': {message}")]
     InvalidImporterSource { path: PathBuf, message: String },
 
-    #[error("native notification backend failed: {message}")]
-    NativeNotificationFailed { message: String },
+    #[cfg(target_os = "macos")]
+    #[error("native notification backend failed: {0}")]
+    NativeNotificationFailed(#[from] mac_notification_sys::error::Error),
 
     #[error(
         "terminal-notifier was not found. Install it (e.g. `brew install terminal-notifier`) \
@@ -71,11 +95,17 @@ or pass a custom path via `--terminal-notifier-path` / `TERMINAL_NOTIFIER_PATH`"
     #[error("both notification backends failed; primary: {primary}; fallback: {fallback}")]
     NotificationBackendsFailed { primary: String, fallback: String },
 
-    #[error("failed to initialize tray icon: {message}")]
-    TrayInit { message: String },
+    #[cfg(target_os = "macos")]
+    #[error("failed to build tray icon: {0}")]
+    TrayBuild(#[from] tray_icon::Error),
 
-    #[error("failed to configure tray menu: {message}")]
-    TrayMenu { message: String },
+    #[cfg(target_os = "macos")]
+    #[error("failed to build tray icon bitmap: {0}")]
+    TrayIconBitmap(#[from] tray_icon::BadIcon),
+
+    #[cfg(target_os = "macos")]
+    #[error("failed to configure tray menu: {0}")]
+    TrayMenu(#[from] tray_icon::menu::Error),
 
     #[error("notification worker thread panicked")]
     WorkerPanic,

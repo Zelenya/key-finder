@@ -128,41 +128,27 @@ fn build_tray() -> Result<(TrayIcon, TrayMenuIds), AppError> {
 
     let open_shortcuts_item = MenuItem::new("Open Shortcuts", true, None);
     let open_shortcuts_id = open_shortcuts_item.id().clone();
-    menu.append(&open_shortcuts_item).map_err(|e| AppError::TrayMenu {
-        message: e.to_string(),
-    })?;
+    menu.append(&open_shortcuts_item)?;
 
     let open_settings_item = MenuItem::new("Settings", true, None);
     let open_settings_id = open_settings_item.id().clone();
-    menu.append(&open_settings_item).map_err(|e| AppError::TrayMenu {
-        message: e.to_string(),
-    })?;
+    menu.append(&open_settings_item)?;
 
     let open_app_focus_item = MenuItem::new("Focus on one App", true, None);
     let open_app_focus_id = open_app_focus_item.id().clone();
-    menu.append(&open_app_focus_item).map_err(|e| AppError::TrayMenu {
-        message: e.to_string(),
-    })?;
+    menu.append(&open_app_focus_item)?;
 
-    menu.append(&PredefinedMenuItem::separator()).map_err(|e| AppError::TrayMenu {
-        message: e.to_string(),
-    })?;
+    menu.append(&PredefinedMenuItem::separator())?;
 
     let toggle_pause_item = CheckMenuItem::new("Pause Notifications", true, false, None);
     let toggle_pause_id = toggle_pause_item.id().clone();
-    menu.append(&toggle_pause_item).map_err(|e| AppError::TrayMenu {
-        message: e.to_string(),
-    })?;
+    menu.append(&toggle_pause_item)?;
 
-    menu.append(&PredefinedMenuItem::separator()).map_err(|e| AppError::TrayMenu {
-        message: e.to_string(),
-    })?;
+    menu.append(&PredefinedMenuItem::separator())?;
 
     let quit_item = MenuItem::new("Quit", true, None);
     let quit_id = quit_item.id().clone();
-    menu.append(&quit_item).map_err(|e| AppError::TrayMenu {
-        message: e.to_string(),
-    })?;
+    menu.append(&quit_item)?;
 
     let tray_icon = create_tray_icon()?;
     let tray = TrayIconBuilder::new()
@@ -170,10 +156,7 @@ fn build_tray() -> Result<(TrayIcon, TrayMenuIds), AppError> {
         .with_icon_as_template(true)
         .with_tooltip(APP_NAME)
         .with_menu(Box::new(menu))
-        .build()
-        .map_err(|e| AppError::TrayInit {
-            message: e.to_string(),
-        })?;
+        .build()?;
 
     Ok((
         tray,
@@ -187,7 +170,7 @@ fn build_tray() -> Result<(TrayIcon, TrayMenuIds), AppError> {
     ))
 }
 
-fn create_tray_icon() -> Result<Icon, AppError> {
+fn create_tray_icon() -> Result<Icon, tray_icon::BadIcon> {
     let width = 24u32;
     let height = 24u32;
     let mut rgba = vec![0u8; (width * height * 4) as usize];
@@ -231,7 +214,5 @@ fn create_tray_icon() -> Result<Icon, AppError> {
         }
     }
 
-    Icon::from_rgba(rgba, width, height).map_err(|e| AppError::TrayInit {
-        message: format!("failed to build tray icon bitmap: {e}"),
-    })
+    Icon::from_rgba(rgba, width, height)
 }

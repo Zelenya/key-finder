@@ -45,8 +45,11 @@ pub(crate) fn parse_duration_setting(setting_name: &str, value: &str) -> Result<
         return Ok(Duration::from_secs(seconds));
     }
 
-    let parsed = parse_duration(value)
-        .map_err(|e| AppError::Config(format!("invalid {setting_name} '{value}': {e}")))?;
+    let parsed = parse_duration(value).map_err(|source| AppError::InvalidDurationSetting {
+        setting: setting_name.to_string(),
+        value: value.to_string(),
+        source,
+    })?;
     if parsed.is_zero() {
         return Err(AppError::Config(format!(
             "{setting_name} must be greater than 0 seconds"

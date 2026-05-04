@@ -24,13 +24,11 @@ impl SqliteAppsRepository {
     pub(crate) fn create_custom_app(&self, app_name: &str, aliases: &[String]) -> Result<AppId, AppError> {
         let app_name = app_name.trim();
         if app_name.is_empty() {
-            return Err(AppError::StorageOperation("app name cannot be empty".to_string()));
+            return Err(AppError::AppNameEmpty);
         }
         let canonical_name = normalize_app_name(app_name);
         if canonical_name.is_empty() {
-            return Err(AppError::StorageOperation(
-                "app name must contain at least one letter or number".to_string(),
-            ));
+            return Err(AppError::AppNameInvalid);
         }
 
         let alias_rows = normalize_aliases(aliases, &canonical_name);
@@ -154,10 +152,10 @@ fn ensure_all_available(conn: &rusqlite::Connection, candidates: &[NameCandidate
 
     for candidate in candidates {
         if let Some(app_name) = conflicts_by_canonical.get(&candidate.canonical_name) {
-            return Err(AppError::StorageOperation(format!(
-                "name '{}' conflicts with existing app '{}'",
-                candidate.display_name, app_name
-            )));
+            return Err(AppError::AppNameConflict {
+                name: candidate.display_name.clone(),
+                existing_app: app_name.clone(),
+            });
         }
     }
 
@@ -222,8 +220,8 @@ mod tests {
 
         assert!(matches!(
             error,
-            AppError::StorageOperation(message)
-                if message == "name 'Code' conflicts with existing app 'Visual Studio Code'"
+            AppError::AppNameConflict { name, existing_app }
+                if name == "Code" && existing_app == "Visual Studio Code"
         ));
     }
 

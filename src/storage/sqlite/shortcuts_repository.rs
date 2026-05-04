@@ -28,12 +28,10 @@ impl SqliteShortcutsRepository {
         let shortcut_display = render_canonical_shortcut(&shortcut);
         let description = description.trim().to_string();
         if shortcut.is_empty() {
-            return Err(AppError::StorageOperation("shortcut can't be empty".to_string()));
+            return Err(AppError::ShortcutEmpty);
         }
         if description.is_empty() {
-            return Err(AppError::StorageOperation(
-                "description can't be empty".to_string(),
-            ));
+            return Err(AppError::ShortcutDescriptionEmpty);
         }
 
         self.db.with_connection("add shortcut", |conn| {
@@ -118,9 +116,7 @@ impl SqliteShortcutsRepository {
         self.db.with_connection("update shortcut description", |conn| {
             let value = description.map(str::trim).filter(|s| !s.is_empty()).map(str::to_string);
             let Some(value) = value else {
-                return Err(AppError::StorageOperation(
-                    "description cannot be empty".to_string(),
-                ));
+                return Err(AppError::ShortcutDescriptionEmpty);
             };
 
             conn.execute(
@@ -338,10 +334,7 @@ mod tests {
         let error = shortcuts
             .update_shortcut_description(id, Some("   "))
             .expect_err("empty description should fail");
-        assert!(matches!(
-            error,
-            AppError::StorageOperation(message) if message == "description cannot be empty"
-        ));
+        assert!(matches!(error, AppError::ShortcutDescriptionEmpty));
 
         let list = shortcuts.list_shortcuts(app_id, true).expect("list shortcuts");
         assert_eq!(list.len(), 1);

@@ -38,11 +38,8 @@ impl Notifier for NativeNotifier {
                 content.subtitle.as_deref(),
                 &content.message,
                 None,
-            )
-            .map(|_| ())
-            .map_err(|e| AppError::NativeNotificationFailed {
-                message: e.to_string(),
-            })
+            )?;
+            Ok(())
         }
     }
 }
