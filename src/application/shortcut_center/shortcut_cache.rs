@@ -51,6 +51,7 @@ mod tests {
                 aliases: vec!["Zed".to_string()],
             }],
             shortcuts: vec![NotificationShortcut {
+                id: 1.into(),
                 app_id: 1.into(),
                 shortcut: "⌘ B".to_string(),
                 description: "Toggle dock".to_string(),
@@ -65,6 +66,7 @@ mod tests {
                 aliases: vec!["Visual Studio Code".to_string()],
             }],
             shortcuts: vec![NotificationShortcut {
+                id: 2.into(),
                 app_id: 2.into(),
                 shortcut: "⌘ P".to_string(),
                 description: "Go to file".to_string(),

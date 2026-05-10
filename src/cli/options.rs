@@ -1,5 +1,5 @@
 use crate::application::runtime_settings::{
-    resolve_app_switch_bounce, resolve_cooldown, resolve_terminal_notifier_path,
+    resolve_app_switch_bounce, resolve_cooldown, resolve_shortcut_focus_count, resolve_terminal_notifier_path,
 };
 use crate::domain::errors::AppError;
 use crate::domain::models::AppConfig;
@@ -28,6 +28,9 @@ pub struct Cli {
     pub app_switch_bounce: Option<String>,
 
     #[arg(long)]
+    pub shortcut_focus_count: Option<String>,
+
+    #[arg(long)]
     pub database_path: Option<PathBuf>,
 }
 
@@ -40,6 +43,7 @@ impl Cli {
         let env_terminal_notifier_path = env::var("TERMINAL_NOTIFIER_PATH").ok();
         let env_cooldown = env::var("COOLDOWN").ok();
         let env_app_switch_bounce = env::var("APP_SWITCH_BOUNCE").ok();
+        let env_shortcut_focus_count = env::var("SHORTCUT_FOCUS_COUNT").ok();
 
         let terminal_notifier_path = resolve_terminal_notifier_path(
             self.terminal_notifier_path.as_deref(),
@@ -56,6 +60,11 @@ impl Cli {
             env_app_switch_bounce.as_deref(),
             db_settings.app_switch_bounce.as_deref(),
         )?;
+        let shortcut_focus_count = resolve_shortcut_focus_count(
+            self.shortcut_focus_count.as_deref(),
+            env_shortcut_focus_count.as_deref(),
+            db_settings.shortcut_focus_count.as_deref(),
+        )?;
 
         let is_bundled = detect_bundled_app();
 
@@ -64,6 +73,7 @@ impl Cli {
             terminal_notifier_path,
             cooldown,
             app_switch_bounce,
+            shortcut_focus_count,
             database_path,
         })
     }

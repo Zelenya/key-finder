@@ -41,6 +41,7 @@ pub(crate) fn run(config: AppConfig, initial_snapshot: NotificationSnapshot) -> 
     let (command_tx, worker_service) = start_notification_service(
         config.cooldown,
         config.app_switch_bounce,
+        config.shortcut_focus_count,
         shortcuts.clone(),
         Arc::new(NativeNotifier::new()),
         Arc::new(frontmost::frontmost_app_name),
@@ -105,7 +106,7 @@ fn handle_menu_event(event: &MenuEvent, menu_ids: &TrayMenuIds, runtime: &TrayRu
     if event.id == menu_ids.toggle_pause {
         let was_paused = runtime.paused.fetch_xor(true, Ordering::SeqCst);
         let now_paused = !was_paused;
-        let _ = runtime.command_tx.send(WorkerCommand::Update(SchedulerCommand::Pause(now_paused)));
+        let _ = runtime.command_tx.send(WorkerCommand::Scheduler(SchedulerCommand::Pause(now_paused)));
         if now_paused {
             eprintln!("notifications paused");
         } else {

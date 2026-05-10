@@ -23,6 +23,7 @@ thiserror = "2.0"
 rusqlite = { version = "0.33", features = ["bundled"] }
 rand = "0.10.0"
 zip = { version = "2", default-features = false }
+chrono = "0.4.44"
 
 [package.metadata.bundle]
 name = "Key Finder"

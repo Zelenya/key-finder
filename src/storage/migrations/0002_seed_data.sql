@@ -4,6 +4,9 @@ values('cooldown', '10m', strftime('%s', 'now'));
 insert or ignore into settings(key, value, updated_at)
 values('app_switch_bounce', '30s', strftime('%s', 'now'));
 
+insert or ignore into settings(key, value, updated_at)
+values('shortcut_focus_count', '5', strftime('%s', 'now'));
+
 insert or ignore into apps(id, name, canonical_name)
 values
   (1, 'IntelliJ IDEA', 'intellijidea'),

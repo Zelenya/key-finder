@@ -4,6 +4,7 @@ use std::time::Duration;
 
 pub(crate) const DEFAULT_COOLDOWN: Duration = Duration::from_secs(10 * 60);
 pub(crate) const DEFAULT_APP_SWITCH_BOUNCE: Duration = Duration::from_secs(30);
+pub(crate) const DEFAULT_SHORTCUT_FOCUS_COUNT: usize = 5;
 
 pub(crate) fn resolve_cooldown(
     cli_value: Option<&str>,
@@ -35,6 +36,16 @@ pub(crate) fn resolve_terminal_notifier_path(
     resolve_runtime_setting(cli_value, env_value, db_value)
 }
 
+pub(crate) fn resolve_shortcut_focus_count(
+    cli_value: Option<&str>,
+    env_value: Option<&str>,
+    db_value: Option<&str>,
+) -> Result<usize, AppError> {
+    resolve_runtime_setting(cli_value, env_value, db_value)
+        .as_deref()
+        .map_or_else(|| Ok(DEFAULT_SHORTCUT_FOCUS_COUNT), parse_shortcut_focus_count)
+}
+
 pub(crate) fn parse_duration_setting(setting_name: &str, value: &str) -> Result<Duration, AppError> {
     if let Ok(seconds) = value.parse::<u64>() {
         if seconds == 0 {
@@ -58,6 +69,22 @@ pub(crate) fn parse_duration_setting(setting_name: &str, value: &str) -> Result<
     Ok(parsed)
 }
 
+pub(crate) fn parse_shortcut_focus_count(value: &str) -> Result<usize, AppError> {
+    value
+        .trim()
+        .parse::<usize>()
+        .map_err(|_| AppError::Config("shortcut focus count must be a positive integer".into()))
+        .and_then(|n| {
+            if n == 0 {
+                Err(AppError::Config(
+                    "shortcut focus count must be greater than 0".into(),
+                ))
+            } else {
+                Ok(n)
+            }
+        })
+}
+
 fn resolve_runtime_setting(
     cli_value: Option<&str>,
     env_value: Option<&str>,
@@ -74,7 +101,10 @@ fn sanitize_setting_value(value: Option<&str>) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{resolve_app_switch_bounce, resolve_cooldown, resolve_terminal_notifier_path};
+    use super::{
+        resolve_app_switch_bounce, resolve_cooldown, resolve_shortcut_focus_count,
+        resolve_terminal_notifier_path,
+    };
     use std::time::Duration;
 
     #[test]
@@ -86,6 +116,10 @@ mod tests {
         assert_eq!(
             resolve_app_switch_bounce(None, Some("15s"), Some("30s")).expect("bounce"),
             Duration::from_secs(15)
+        );
+        assert_eq!(
+            resolve_shortcut_focus_count(None, Some("4"), Some("9")).expect("focus count"),
+            4
         );
         assert_eq!(
             resolve_terminal_notifier_path(
@@ -109,6 +143,10 @@ mod tests {
             Duration::from_secs(15)
         );
         assert_eq!(
+            resolve_shortcut_focus_count(None, Some("4"), None).expect("focus count"),
+            4
+        );
+        assert_eq!(
             resolve_terminal_notifier_path(None, Some("/env/terminal-notifier"), None).as_deref(),
             Some("/env/terminal-notifier")
         );
@@ -123,6 +161,10 @@ mod tests {
         assert_eq!(
             resolve_app_switch_bounce(Some("20s"), Some("45s"), Some("30s")).expect("bounce"),
             Duration::from_secs(20)
+        );
+        assert_eq!(
+            resolve_shortcut_focus_count(Some("4"), Some("3"), Some("9")).expect("focus count"),
+            4
         );
         assert_eq!(
             resolve_terminal_notifier_path(
@@ -144,6 +186,10 @@ mod tests {
         assert_eq!(
             resolve_app_switch_bounce(None, Some("30s"), Some("   ")).expect("bounce"),
             Duration::from_secs(30)
+        );
+        assert_eq!(
+            resolve_shortcut_focus_count(None, Some("4"), Some("   ")).expect("focus count"),
+            4
         );
         assert_eq!(
             resolve_terminal_notifier_path(None, Some("/env/path"), Some("")).as_deref(),

@@ -15,5 +15,6 @@ pub struct AppConfig {
     pub terminal_notifier_path: Option<String>,
     pub cooldown: Duration,
     pub app_switch_bounce: Duration,
+    pub shortcut_focus_count: usize,
     pub database_path: PathBuf,
 }

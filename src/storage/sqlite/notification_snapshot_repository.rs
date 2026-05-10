@@ -28,12 +28,13 @@ impl SqliteNotificationSnapshotRepository {
 fn load_notification_shortcuts(conn: &Connection) -> Result<Vec<NotificationShortcut>, AppError> {
     let mut stmt = conn
         .prepare(
-            "select s.app_id,
+            "select s.id,
+                    s.app_id,
                     s.shortcut_norm,
                     s.description
              from shortcuts s
              where s.state = 'active'
-             order by s.app_id",
+             order by s.app_id, s.id",
         )
         .map_err(|source| AppError::Database {
             operation: "prepare notification shortcut query".to_string(),
@@ -42,10 +43,12 @@ fn load_notification_shortcuts(conn: &Connection) -> Result<Vec<NotificationShor
 
     let rows = stmt
         .query_map([], |row| {
-            let app_id: AppId = row.get(0)?;
-            let shortcut_norm: String = row.get(1)?;
-            let description: String = row.get(2)?;
+            let id = row.get(0)?;
+            let app_id: AppId = row.get(1)?;
+            let shortcut_norm: String = row.get(2)?;
+            let description: String = row.get(3)?;
             Ok(NotificationShortcut {
+                id,
                 app_id,
                 shortcut: render_canonical_shortcut(&shortcut_norm),
                 description,

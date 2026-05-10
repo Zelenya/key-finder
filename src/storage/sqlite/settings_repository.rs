@@ -63,16 +63,23 @@ impl SqliteSettingsRepository {
 enum SettingKey {
     Cooldown,
     AppSwitchBounce,
+    ShortcutFocusCount,
     TerminalNotifierPath,
 }
 
 impl SettingKey {
-    const ALL: [Self; 3] = [Self::Cooldown, Self::AppSwitchBounce, Self::TerminalNotifierPath];
+    const ALL: [Self; 4] = [
+        Self::Cooldown,
+        Self::AppSwitchBounce,
+        Self::ShortcutFocusCount,
+        Self::TerminalNotifierPath,
+    ];
 
     fn as_str(self) -> &'static str {
         match self {
             Self::Cooldown => "cooldown",
             Self::AppSwitchBounce => "app_switch_bounce",
+            Self::ShortcutFocusCount => "shortcut_focus_count",
             Self::TerminalNotifierPath => "terminal_notifier_path",
         }
     }
@@ -81,6 +88,7 @@ impl SettingKey {
         match key {
             "cooldown" => Some(Self::Cooldown),
             "app_switch_bounce" => Some(Self::AppSwitchBounce),
+            "shortcut_focus_count" => Some(Self::ShortcutFocusCount),
             "terminal_notifier_path" => Some(Self::TerminalNotifierPath),
             _ => None,
         }
@@ -90,6 +98,7 @@ impl SettingKey {
         match self {
             Self::Cooldown => settings.cooldown.as_deref(),
             Self::AppSwitchBounce => settings.app_switch_bounce.as_deref(),
+            Self::ShortcutFocusCount => settings.shortcut_focus_count.as_deref(),
             Self::TerminalNotifierPath => settings.terminal_notifier_path.as_deref(),
         }
     }
@@ -98,6 +107,7 @@ impl SettingKey {
         match self {
             Self::Cooldown => settings.cooldown = Some(value),
             Self::AppSwitchBounce => settings.app_switch_bounce = Some(value),
+            Self::ShortcutFocusCount => settings.shortcut_focus_count = Some(value),
             Self::TerminalNotifierPath => settings.terminal_notifier_path = Some(value),
         }
     }
@@ -145,6 +155,7 @@ mod tests {
             .save_app_settings(&crate::storage::AppSettings {
                 cooldown: Some("30m".to_string()),
                 app_switch_bounce: Some("45s".to_string()),
+                shortcut_focus_count: Some("4".to_string()),
                 terminal_notifier_path: Some("/opt/homebrew/bin/terminal-notifier".to_string()),
             })
             .expect("save settings");
@@ -152,6 +163,7 @@ mod tests {
         let settings = settings_repo.load_app_settings().expect("load settings");
         assert_eq!(settings.cooldown.as_deref(), Some("30m"));
         assert_eq!(settings.app_switch_bounce.as_deref(), Some("45s"));
+        assert_eq!(settings.shortcut_focus_count.as_deref(), Some("4"));
         assert_eq!(
             settings.terminal_notifier_path.as_deref(),
             Some("/opt/homebrew/bin/terminal-notifier")

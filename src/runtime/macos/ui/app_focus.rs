@@ -80,7 +80,7 @@ fn open_focus_app_dialog(
 
 fn focus_on_app(worker_tx: &mpsc::Sender<WorkerCommand>, focus_state: AppFocusState) -> Result<(), AppError> {
     worker_tx
-        .send(WorkerCommand::Update(SchedulerCommand::Focus(focus_state)))
+        .send(WorkerCommand::Scheduler(SchedulerCommand::Focus(focus_state)))
         .map_err(|e| AppError::UiOperation(format!("failed to send app focus update: {e}")))
 }
 

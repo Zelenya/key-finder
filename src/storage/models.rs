@@ -64,6 +64,7 @@ impl FromSql for ShortcutId {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct NotificationShortcut {
+    pub(crate) id: ShortcutId,
     pub(crate) app_id: AppId,
     pub(crate) shortcut: String,
     pub(crate) description: String,
@@ -96,6 +97,20 @@ impl NotificationSnapshot {
         self.shortcuts.iter().filter(move |shortcut| shortcut.app_id == app_id)
     }
 
+    pub(crate) fn app_ids_with_shortcuts(&self) -> Vec<AppId> {
+        let mut app_ids = Vec::new();
+        for shortcut in &self.shortcuts {
+            if !app_ids.contains(&shortcut.app_id) {
+                app_ids.push(shortcut.app_id);
+            }
+        }
+        app_ids
+    }
+
+    pub(crate) fn shortcut_by_id(&self, shortcut_id: ShortcutId) -> Option<&NotificationShortcut> {
+        self.shortcuts.iter().find(|shortcut| shortcut.id == shortcut_id)
+    }
+
     pub(crate) fn resolve_guessed_app(&self, app_name: &str) -> Option<AppId> {
         self.apps.iter().find(|app| app.matches_given_name(app_name)).map(|app| app.app_id)
     }
@@ -105,10 +120,13 @@ impl NotificationSnapshot {
     }
 }
 
+// TODO: We keep those as strings until settings runtime parses those.
+// We can split out raw parts of settings or parser earlier.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub(crate) struct AppSettings {
     pub cooldown: Option<String>,
     pub app_switch_bounce: Option<String>,
+    pub shortcut_focus_count: Option<String>,
     pub terminal_notifier_path: Option<String>,
 }
 
